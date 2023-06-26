@@ -1,5 +1,3 @@
-use coldbrew::jvm;
-
 fn main() {
     // What are the program components ?
     // 1. Reads a Java class file.
