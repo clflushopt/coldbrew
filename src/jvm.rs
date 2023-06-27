@@ -1,4 +1,5 @@
 //! Lightweight implementation of a parser and decoder for JVM class files.
+use std::collections::HashMap;
 
 /// Values of magic bytes of a JVM class file.
 const JVM_CLASS_FILE_MAGIC: u32 = 0xCAFEBABE;
@@ -34,14 +35,107 @@ enum ConstantKind {
     Package = 20,
 }
 
+/// Verification type specifies the type of a single variable location or
+/// a single operand stack entry.
 #[derive(Debug, Copy, Clone)]
-struct FieldInfo;
+enum VerificationType {
+    TopVerification = 0,
+    IntegerVerification = 1,
+    FloatVerification = 2,
+    LongVerification = 4,
+    DoubleVerification = 3,
+    NullVerification = 5,
+    UninitializedThisVerification = 6,
+    ObjectVerification = 7,
+    UninitializedVerification = 8,
+}
 
+/// Verification info struct.
 #[derive(Debug, Copy, Clone)]
-struct MethodInfo;
+struct VerificationInfo {
+    tag: VerificationType,
+    cpool_index_or_offset: u16,
+}
 
+/// Stack map frame type.
 #[derive(Debug, Copy, Clone)]
-struct AttributeInfo;
+enum StackMapFrameType {
+    Same,
+    SameLocals,
+    SameLocalsExtended,
+    Chop,
+    SameExtended,
+    Append,
+    Full,
+}
+
+/// Stack map frame.
+#[derive(Debug, Clone)]
+struct StackMapFrame {
+    t: StackMapFrameType,
+    offset_delta: u16,
+    locals: Vec<VerificationInfo>,
+    stack: Vec<VerificationInfo>,
+}
+
+/// Bootstrap method.
+#[derive(Debug, Clone)]
+struct BootstrapMethod {
+    method_ref: u16,
+    arguments: Vec<u16>,
+}
+
+#[derive(Debug, Clone)]
+enum AttributeInfo {
+    ConstantValueAttribute {
+        constant_value_index: u64,
+        attribute_name: String,
+    },
+    CodeAttribute {
+        max_stack: u16,
+        max_locals: u16,
+        code: Vec<u8>,
+        // Exception table.
+        attributes: HashMap<String, AttributeInfo>,
+        attribute_name: String,
+    },
+    StackMapTableAttribute {
+        entries: Vec<StackMapFrame>,
+        attribute_name: String,
+    },
+    SourceFileAttribute {
+        source_file_index: u16,
+        attribute_name: String,
+    },
+    BootstrapMethodsAttribute {
+        bootstrap_methods: Vec<BootstrapMethod>,
+        attribute_name: String,
+    },
+    NestHostAttribute {
+        host_class_index: u16,
+        attribute_name: String,
+    },
+    NestMembersAttribute {
+        classes: Vec<u16>,
+        attribute_name: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct FieldInfo {
+    access_flag: u16,
+    name_index: u16,
+    descriptor_index: u16,
+    attributes: HashMap<String, AttributeInfo>,
+}
+
+#[derive(Debug, Clone)]
+struct MethodInfo {
+    access_flag: u16,
+    name_index: u16,
+    descriptor_index: u16,
+    attributes: HashMap<String, AttributeInfo>,
+}
 
 /// `JVMClassFile` represents a Java class file.
 #[derive(Debug, Clone)]
