@@ -1,5 +1,12 @@
 //! Lightweight implementation of a parser and decoder for JVM class files.
+use byteorder::{BigEndian, ReadBytesExt};
 use std::collections::HashMap;
+
+
+
+use std::io::{Cursor, Read};
+use std::path::{Path};
+use std::{io};
 
 /// Values of magic bytes of a JVM class file.
 const JVM_CLASS_FILE_MAGIC: u32 = 0xCAFEBABE;
@@ -139,7 +146,7 @@ struct MethodInfo {
 
 /// `JVMClassFile` represents a Java class file.
 #[derive(Debug, Clone)]
-struct JVMClassFile {
+pub struct JVMClassFile {
     magic: u32,
     minor_version: u16,
     major_version: u16,
@@ -158,6 +165,59 @@ struct JVMClassFile {
     attributes: Vec<AttributeInfo>,
 }
 
+/// `JVMParser` namespaces functions that handle parsing of Java class files.
+#[derive(Debug)]
+pub struct JVMParser;
+
+impl JVMParser {
+    #[must_use]
+    // Creates a new JVMParser with a given Java class file to parse.
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    // Parse a preloaded Java class file.
+    fn parse(&self, class_file_bytes: &[u8]) -> io::Result<JVMClassFile> {
+        // Create a new cursor on the class file bytes.
+        let mut buffer = Cursor::new(class_file_bytes);
+        // Start reading data.
+        let magic = buffer.read_u32::<BigEndian>()?;
+        let minor_version = buffer.read_u16::<BigEndian>()?;
+        let major_version = buffer.read_u16::<BigEndian>()?;
+
+        let jvm_class_file = JVMClassFile {
+            magic: magic,
+            minor_version: minor_version,
+            major_version: major_version,
+            constant_pool_count: 0,
+            constant_pool: Vec::new(),
+            access_flags: 0,
+            this_class: 0,
+            super_class: 0,
+            interfaces_count: 0,
+            interfaces: Vec::new(),
+            fields_count: 0,
+            fields: Vec::new(),
+            methods_count: 0,
+            methods: Vec::new(),
+            attributes_count: 0,
+            attributes: Vec::new(),
+        };
+        Ok(jvm_class_file)
+    }
+}
+
+/// Helper function to read file into a buffer.
+fn read_class_file(fp: &Path) -> Vec<u8> {
+    use std::fs::File;
+    use std::io::prelude::*;
+
+    let mut f = File::open(fp).unwrap();
+    let mut buffer = Vec::new();
+    f.read_to_end(&mut buffer).unwrap();
+    buffer
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,17 +228,13 @@ mod tests {
     fn can_you_read_class_file() {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = Path::new(&env_var).join("support/SingleFuncCall.class");
+        let class_file_bytes = read_class_file(&path);
+        let class_file = JVMParser::new().parse(&class_file_bytes);
 
-        use std::fs::File;
-
-        use std::io::prelude::*;
-
-        let mut f = File::open(path).unwrap();
-        let mut buffer = Vec::new();
-        f.read_to_end(&mut buffer).unwrap();
-        assert_eq!(
-            JVM_CLASS_FILE_MAGIC,
-            u32::from_be_bytes(buffer[..4].try_into().unwrap())
-        );
+        assert!(class_file.is_ok());
+        assert_eq!(JVM_CLASS_FILE_MAGIC, class_file.unwrap().magic,);
     }
+
+    #[test]
+    fn can_parse_class_file_header() {}
 }
