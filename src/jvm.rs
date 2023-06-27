@@ -2,11 +2,9 @@
 use byteorder::{BigEndian, ReadBytesExt};
 use std::collections::HashMap;
 
-
-
+use std::io;
 use std::io::{Cursor, Read};
-use std::path::{Path};
-use std::{io};
+use std::path::Path;
 
 /// Values of magic bytes of a JVM class file.
 const JVM_CLASS_FILE_MAGIC: u32 = 0xCAFEBABE;
@@ -229,10 +227,14 @@ mod tests {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = Path::new(&env_var).join("support/SingleFuncCall.class");
         let class_file_bytes = read_class_file(&path);
-        let class_file = JVMParser::new().parse(&class_file_bytes);
-
-        assert!(class_file.is_ok());
-        assert_eq!(JVM_CLASS_FILE_MAGIC, class_file.unwrap().magic,);
+        let result = JVMParser::new().parse(&class_file_bytes);
+        assert!(result.is_ok());
+        let class_file = result.unwrap();
+        assert_eq!(JVM_CLASS_FILE_MAGIC, class_file.magic);
+        assert!(
+            class_file.minor_version == 0 || class_file.minor_version == 65535
+        );
+        assert!(class_file.major_version > 61);
     }
 
     #[test]
