@@ -19,12 +19,13 @@ struct CPInfo {
 }
 
 /// `ConstantKind` encodes the kind of a constant in the constants pool.
+#[repr(u8)]
 #[derive(Debug, Copy, Clone)]
 enum ConstantKind {
     Class = 7,
     FieldRef = 9,
     MethodRef = 10,
-    InterfaceMethodref = 11,
+    InterfaceMethodRef = 11,
     String = 8,
     Integer = 3,
     Float = 4,
@@ -38,6 +39,29 @@ enum ConstantKind {
     InvokeDynamic = 18,
     Module = 19,
     Package = 20,
+    Unspecified,
+}
+
+impl From<u8> for ConstantKind {
+    fn from(v: u8) -> Self {
+        match v {
+            1 => ConstantKind::Utf8,
+            3 => ConstantKind::Integer,
+            4 => ConstantKind::Float,
+            5 => ConstantKind::Long,
+            6 => ConstantKind::Double,
+            7 => ConstantKind::Class,
+            8 => ConstantKind::String,
+            9 => ConstantKind::FieldRef,
+            10 => ConstantKind::MethodRef,
+            12 => ConstantKind::InterfaceMethodRef,
+            15 => ConstantKind::MethodHandle,
+            16 => ConstantKind::MethodType,
+            17 => ConstantKind::Dynamic,
+            18 => ConstantKind::InvokeDynamic,
+            _ => ConstantKind::Unspecified
+        }
+    }
 }
 
 /// Verification type specifies the type of a single variable location or
@@ -178,17 +202,31 @@ impl JVMParser {
     fn parse(&self, class_file_bytes: &[u8]) -> io::Result<JVMClassFile> {
         // Create a new cursor on the class file bytes.
         let mut buffer = Cursor::new(class_file_bytes);
-        // Start reading data.
+        // Read magic header..
         let magic = buffer.read_u32::<BigEndian>()?;
+        // Read the class file version numbers.
         let minor_version = buffer.read_u16::<BigEndian>()?;
         let major_version = buffer.read_u16::<BigEndian>()?;
+        // Read the number of constants in the pool.
+        let constant_pool_count = buffer.read_u16::<BigEndian>()?;
+        // Allocate a new pool and populate it with the constants.
+        let mut constant_pool = Vec::with_capacity(constant_pool_count.into());
+        // The first entry in the pool is at index 1 according to JVM
+        // spec.
+        for ii in 1..constant_pool_count {
+            let tag = buffer.read_u8()?;
+            match ConstantKind::from(tag) {
+                ConstantKind::Class => println!("found class"),
+                _ => println!("found : {}", tag),
+            }
+        }
 
         let jvm_class_file = JVMClassFile {
             magic: magic,
             minor_version: minor_version,
             major_version: major_version,
-            constant_pool_count: 0,
-            constant_pool: Vec::new(),
+            constant_pool_count: constant_pool_count,
+            constant_pool: constant_pool,
             access_flags: 0,
             this_class: 0,
             super_class: 0,
