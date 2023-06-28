@@ -259,7 +259,7 @@ impl JVMParser {
         let mut constant_pool = Vec::with_capacity(constant_pool_count.into());
         // The first entry in the pool is at index 1 according to JVM
         // spec.
-        for _ii in 1..constant_pool_count as usize {
+        for ii in 1..constant_pool_count as usize {
             let tag = buffer.read_u8()?;
             match ConstantKind::from(tag) {
                 ConstantKind::Class => {
@@ -292,6 +292,56 @@ impl JVMParser {
                         name_and_type_index: buffer
                             .read_u16::<BigEndian>()
                             .unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::String => {
+                    let value = CPInfo::ConstantString {
+                        string_index: buffer.read_u16::<BigEndian>().unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::Integer => {
+                    let value = CPInfo::ConstantInteger {
+                        bytes: buffer.read_u32::<BigEndian>().unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::Float => {
+                    let value = CPInfo::ConstantFloat {
+                        bytes: buffer.read_u32::<BigEndian>().unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::Long => {
+                    let value = CPInfo::ConstantLong {
+                        hi_bytes: buffer.read_u32::<BigEndian>().unwrap(),
+                        lo_bytes: buffer.read_u32::<BigEndian>().unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::Double => {
+                    let value = CPInfo::ConstantDouble {
+                        hi_bytes: buffer.read_u32::<BigEndian>().unwrap(),
+                        lo_bytes: buffer.read_u32::<BigEndian>().unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::NameAndType => {
+                    let value = CPInfo::ConstantNameAndType {
+                        name_index: buffer.read_u16::<BigEndian>().unwrap(),
+                        descriptor_index: buffer
+                            .read_u16::<BigEndian>()
+                            .unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::Utf8 => {
+                    let length = buffer.read_u16::<BigEndian>().unwrap();
+                    let mut buf = vec![0u8; length as usize];
+                    buffer.read_exact(&mut buf).unwrap();
+                    let value = CPInfo::ConstantUtf8 {
+                        bytes: String::from_utf8(buf).unwrap(),
                     };
                     constant_pool.push(value);
                 }
@@ -354,5 +404,13 @@ mod tests {
     }
 
     #[test]
-    fn can_parse_class_file_header() {}
+    fn can_parse_class_file_header() {
+        let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&env_var).join("support/SingleFuncCall.class");
+        let class_file_bytes = read_class_file(&path);
+        let result = JVMParser::new().parse(&class_file_bytes);
+        assert!(result.is_ok());
+        let class_file = result.unwrap();
+        println!("{:?}", class_file.constant_pool);
+    }
 }
