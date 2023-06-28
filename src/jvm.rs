@@ -9,13 +9,59 @@ use std::path::Path;
 /// Values of magic bytes of a JVM class file.
 const JVM_CLASS_FILE_MAGIC: u32 = 0xCAFEBABE;
 
-/// `CPInfo` represents constant pool entries.
+/// `CPInfo` represents constant pool entries,
 #[derive(Debug, Clone)]
-struct CPInfo {
-    // Value of `ConstantKind` indicates the kind of the constant represented
-    // by this entry.
-    tag: u8,
-    info: Vec<u8>,
+enum CPInfo {
+    ConstantClass {
+        name_index: u16,
+    },
+    ConstantFieldRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    },
+    ConstantMethodRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    },
+    ConstantInterfaceMethodRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    },
+    ConstantString {
+        string_index: u16,
+    },
+    ConstantInteger {
+        bytes: u32,
+    },
+    ConstantFloat {
+        bytes: u32,
+    },
+    ConstantLong {
+        hi_bytes: u32,
+        lo_bytes: u32,
+    },
+    ConstantDouble {
+        hi_bytes: u32,
+        lo_bytes: u32,
+    },
+    ConstantNameAndType {
+        name_index: u16,
+        descriptor_index: u16,
+    },
+    ConstantUtf8 {
+        bytes: String,
+    },
+    ConstantMethodHandle {
+        reference_kind: u16,
+        reference_index: u16,
+    },
+    ConstantMethodType {
+        descriptor_index: u16,
+    },
+    ConstantInvokeDynamic {
+        bootstrap_method_attr_index: u16,
+        name_and_type_index: u16,
+    },
 }
 
 /// `ConstantKind` encodes the kind of a constant in the constants pool.
@@ -59,7 +105,7 @@ impl From<u8> for ConstantKind {
             16 => ConstantKind::MethodType,
             17 => ConstantKind::Dynamic,
             18 => ConstantKind::InvokeDynamic,
-            _ => ConstantKind::Unspecified
+            _ => ConstantKind::Unspecified,
         }
     }
 }
@@ -213,10 +259,42 @@ impl JVMParser {
         let mut constant_pool = Vec::with_capacity(constant_pool_count.into());
         // The first entry in the pool is at index 1 according to JVM
         // spec.
-        for ii in 1..constant_pool_count {
+        for _ii in 1..constant_pool_count as usize {
             let tag = buffer.read_u8()?;
             match ConstantKind::from(tag) {
-                ConstantKind::Class => println!("found class"),
+                ConstantKind::Class => {
+                    let value = CPInfo::ConstantClass {
+                        name_index: buffer.read_u16::<BigEndian>().unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::FieldRef => {
+                    let value = CPInfo::ConstantFieldRef {
+                        class_index: buffer.read_u16::<BigEndian>().unwrap(),
+                        name_and_type_index: buffer
+                            .read_u16::<BigEndian>()
+                            .unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::MethodRef => {
+                    let value = CPInfo::ConstantMethodRef {
+                        class_index: buffer.read_u16::<BigEndian>().unwrap(),
+                        name_and_type_index: buffer
+                            .read_u16::<BigEndian>()
+                            .unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
+                ConstantKind::InterfaceMethodRef => {
+                    let value = CPInfo::ConstantInterfaceMethodRef {
+                        class_index: buffer.read_u16::<BigEndian>().unwrap(),
+                        name_and_type_index: buffer
+                            .read_u16::<BigEndian>()
+                            .unwrap(),
+                    };
+                    constant_pool.push(value);
+                }
                 _ => println!("found : {}", tag),
             }
         }
