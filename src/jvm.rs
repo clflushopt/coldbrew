@@ -363,6 +363,16 @@ impl JVMParser {
         let this_class = buffer.read_u16::<BigEndian>()?;
         let super_class = buffer.read_u16::<BigEndian>()?;
 
+        let interfaces_count = buffer.read_u16::<BigEndian>()?;
+        let mut interfaces = Vec::new();
+
+        for i in 0..interfaces_count {
+            let interface = buffer.read_u16::<BigEndian>()?;
+            interfaces.push(interface);
+        }
+
+        let fields_count = buffer.read_u16::<BigEndian>()?;
+
         let jvm_class_file = JVMClassFile {
             magic: magic,
             minor_version: minor_version,
@@ -372,8 +382,8 @@ impl JVMParser {
             access_flags: access_flags,
             this_class: this_class,
             super_class: super_class,
-            interfaces_count: 0,
-            interfaces: Vec::new(),
+            interfaces_count: interfaces_count,
+            interfaces: interfaces,
             fields_count: 0,
             fields: Vec::new(),
             methods_count: 0,
@@ -443,14 +453,15 @@ mod tests {
             "SingleFuncCall.java",
         ];
         let mut actual_strings = Vec::new();
-        for constant in class_file.constant_pool {
+        for constant in &class_file.constant_pool {
             match constant {
-                CPInfo::ConstantUtf8 { bytes } => actual_strings.push(bytes),
+                CPInfo::ConstantUtf8 { bytes } => actual_strings.push(bytes.clone()),
                 _ => (),
             }
         }
         for s in expected_strings {
             assert!(actual_strings.contains(&s.to_string()));
         }
+        println!("{:?}", class_file);
     }
 }
