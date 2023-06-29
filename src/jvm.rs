@@ -160,6 +160,15 @@ struct BootstrapMethod {
     arguments: Vec<u16>,
 }
 
+/// Exception table.
+#[derive(Debug, Clone)]
+struct ExceptionEntry {
+    start_pc: u16,
+    end_pc: u16,
+    handler_pc: u16,
+    catch_type: u16,
+}
+
 #[derive(Debug, Clone)]
 enum AttributeInfo {
     ConstantValueAttribute {
@@ -259,6 +268,7 @@ impl JVMParser {
         let mut constant_pool = Vec::with_capacity(constant_pool_count.into());
         // The first entry in the pool is at index 1 according to JVM
         // spec.
+        // TODO: align vector entries with constant pool.
         for ii in 1..constant_pool_count as usize {
             let tag = buffer.read_u8()?;
             match ConstantKind::from(tag) {
@@ -349,15 +359,19 @@ impl JVMParser {
             }
         }
 
+        let access_flags = buffer.read_u16::<BigEndian>()?;
+        let this_class = buffer.read_u16::<BigEndian>()?;
+        let super_class = buffer.read_u16::<BigEndian>()?;
+
         let jvm_class_file = JVMClassFile {
             magic: magic,
             minor_version: minor_version,
             major_version: major_version,
             constant_pool_count: constant_pool_count,
             constant_pool: constant_pool,
-            access_flags: 0,
-            this_class: 0,
-            super_class: 0,
+            access_flags: access_flags,
+            this_class: this_class,
+            super_class: super_class,
             interfaces_count: 0,
             interfaces: Vec::new(),
             fields_count: 0,
@@ -411,6 +425,32 @@ mod tests {
         let result = JVMParser::new().parse(&class_file_bytes);
         assert!(result.is_ok());
         let class_file = result.unwrap();
-        println!("{:?}", class_file.constant_pool);
+        let expected_strings = vec![
+            "java/lang/Object",
+            "<init>",
+            "SingleFuncCall",
+            "(II)I",
+            "java/lang/System",
+            "Ljava/io/PrintStream;",
+            "java/io/PrintStream",
+            "println",
+            "(I)V",
+            "Code",
+            "LineNumberTable",
+            "main",
+            "([Ljava/lang/String;)V",
+            "SourceFile",
+            "SingleFuncCall.java",
+        ];
+        let mut actual_strings = Vec::new();
+        for constant in class_file.constant_pool {
+            match constant {
+                CPInfo::ConstantUtf8 { bytes } => actual_strings.push(bytes),
+                _ => (),
+            }
+        }
+        for s in expected_strings {
+            assert!(actual_strings.contains(&s.to_string()));
+        }
     }
 }
