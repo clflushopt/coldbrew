@@ -62,6 +62,8 @@ enum CPInfo {
         bootstrap_method_attr_index: u16,
         name_and_type_index: u16,
     },
+    // Proxy value used mostly to populate the gaps in the constant pool.
+    Unspecified,
 }
 
 /// `ConstantKind` encodes the kind of a constant in the constants pool.
@@ -265,18 +267,19 @@ impl JVMParser {
         // Read the number of constants in the pool.
         let constant_pool_count = buffer.read_u16::<BigEndian>()?;
         // Allocate a new pool and populate it with the constants.
-        let mut constant_pool = Vec::with_capacity(constant_pool_count.into());
+        // let mut constant_pool = Vec::with_capacity(constant_pool_count.into());
+        let mut constant_pool =
+            vec![CPInfo::Unspecified; constant_pool_count as usize];
         // The first entry in the pool is at index 1 according to JVM
         // spec.
-        // TODO: align vector entries with constant pool.
-        for ii in 1..constant_pool_count as usize {
+        for mut ii in 1..constant_pool_count as usize {
             let tag = buffer.read_u8()?;
             match ConstantKind::from(tag) {
                 ConstantKind::Class => {
                     let value = CPInfo::ConstantClass {
                         name_index: buffer.read_u16::<BigEndian>().unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 ConstantKind::FieldRef => {
                     let value = CPInfo::ConstantFieldRef {
@@ -285,7 +288,7 @@ impl JVMParser {
                             .read_u16::<BigEndian>()
                             .unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 ConstantKind::MethodRef => {
                     let value = CPInfo::ConstantMethodRef {
@@ -294,7 +297,7 @@ impl JVMParser {
                             .read_u16::<BigEndian>()
                             .unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 ConstantKind::InterfaceMethodRef => {
                     let value = CPInfo::ConstantInterfaceMethodRef {
@@ -303,39 +306,41 @@ impl JVMParser {
                             .read_u16::<BigEndian>()
                             .unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 ConstantKind::String => {
                     let value = CPInfo::ConstantString {
                         string_index: buffer.read_u16::<BigEndian>().unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 ConstantKind::Integer => {
                     let value = CPInfo::ConstantInteger {
                         bytes: buffer.read_u32::<BigEndian>().unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 ConstantKind::Float => {
                     let value = CPInfo::ConstantFloat {
                         bytes: buffer.read_u32::<BigEndian>().unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 ConstantKind::Long => {
                     let value = CPInfo::ConstantLong {
                         hi_bytes: buffer.read_u32::<BigEndian>().unwrap(),
                         lo_bytes: buffer.read_u32::<BigEndian>().unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
+                    ii += 1;
                 }
                 ConstantKind::Double => {
                     let value = CPInfo::ConstantDouble {
                         hi_bytes: buffer.read_u32::<BigEndian>().unwrap(),
                         lo_bytes: buffer.read_u32::<BigEndian>().unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
+                    ii += 1;
                 }
                 ConstantKind::NameAndType => {
                     let value = CPInfo::ConstantNameAndType {
@@ -344,7 +349,7 @@ impl JVMParser {
                             .read_u16::<BigEndian>()
                             .unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 ConstantKind::Utf8 => {
                     let length = buffer.read_u16::<BigEndian>().unwrap();
@@ -353,7 +358,7 @@ impl JVMParser {
                     let value = CPInfo::ConstantUtf8 {
                         bytes: String::from_utf8(buf).unwrap(),
                     };
-                    constant_pool.push(value);
+                    constant_pool[ii] = value;
                 }
                 _ => println!("found : {}", tag),
             }
@@ -392,6 +397,16 @@ impl JVMParser {
             attributes: Vec::new(),
         };
         Ok(jvm_class_file)
+    }
+}
+
+/// Parse attribute infos.
+fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) {
+    let attribute_count = reader.read_u16::<BigEndian>().unwrap();
+    let attributes: Vec<AttributeInfo> = Vec::new();
+
+    for _ in 0..attribute_count {
+        let attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
     }
 }
 
@@ -455,13 +470,14 @@ mod tests {
         let mut actual_strings = Vec::new();
         for constant in &class_file.constant_pool {
             match constant {
-                CPInfo::ConstantUtf8 { bytes } => actual_strings.push(bytes.clone()),
+                CPInfo::ConstantUtf8 { bytes } => {
+                    actual_strings.push(bytes.clone())
+                }
                 _ => (),
             }
         }
         for s in expected_strings {
             assert!(actual_strings.contains(&s.to_string()));
         }
-        println!("{:?}", class_file);
     }
 }
