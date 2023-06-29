@@ -174,7 +174,7 @@ struct ExceptionEntry {
 #[derive(Debug, Clone)]
 enum AttributeInfo {
     ConstantValueAttribute {
-        constant_value_index: u64,
+        constant_value_index: u16,
         attribute_name: String,
     },
     CodeAttribute {
@@ -205,6 +205,29 @@ enum AttributeInfo {
         classes: Vec<u16>,
         attribute_name: String,
     },
+}
+
+const ATTRIBUTE_NAME_CONSTANT_VALUE: &'static str = "ConstantValue";
+const ATTRIBUTE_NAME_CODE: &'static str = "Code";
+const ATTRIBUTE_NAME_STACK_MAP_TABLE: &'static str = "StackmapTable";
+const ATTRIBUTE_NAME_SOURCE_FILE: &'static str = "SourceFile";
+const ATTRIBUTE_NAME_BOOTSTRAP_METHODS: &'static str = "BootstrapMethods";
+const ATTRIBUTE_NAME_NEST_HOST: &'static str = "NestHost";
+const ATTRIBUTE_NAME_NEST_MEMBERS: &'static str = "ConstantValue";
+
+impl AttributeInfo {
+    // Returns default attribute name for an attribute.
+    fn attribute_name(&self) -> &'static str {
+        match self {
+            ConstantValueAttribute => "ConstantValue",
+            CodeAttribute => "Code",
+            StackMapTableAttribute => "StackMapTable",
+            SourceFileAttribute => "SourceFile",
+            BootstrapMethodsAttribute => "BootstrapMethods",
+            NestHostAttribute => "NestHost",
+            NestMembersAttribute => "NestMembers",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -371,12 +394,12 @@ impl JVMParser {
         let interfaces_count = buffer.read_u16::<BigEndian>()?;
         let mut interfaces = Vec::new();
 
-        for i in 0..interfaces_count {
+        for _ in 0..interfaces_count {
             let interface = buffer.read_u16::<BigEndian>()?;
             interfaces.push(interface);
         }
 
-        let fields_count = buffer.read_u16::<BigEndian>()?;
+        let (fields_count, fields) = parse_fields(&mut buffer, &constant_pool);
 
         let jvm_class_file = JVMClassFile {
             magic: magic,
@@ -389,8 +412,8 @@ impl JVMParser {
             super_class: super_class,
             interfaces_count: interfaces_count,
             interfaces: interfaces,
-            fields_count: 0,
-            fields: Vec::new(),
+            fields_count: fields_count,
+            fields: fields,
             methods_count: 0,
             methods: Vec::new(),
             attributes_count: 0,
@@ -400,13 +423,45 @@ impl JVMParser {
     }
 }
 
-/// Parse attribute infos.
+/// Parse fields.
+fn parse_fields(
+    reader: &mut impl Read,
+    constant_pool: &[CPInfo],
+) -> (u16, Vec<FieldInfo>) {
+    let fields_count = reader.read_u16::<BigEndian>().unwrap();
+    let mut fields: Vec<FieldInfo> = Vec::new();
+
+    for _ in 0..fields_count {
+        let access_flag = reader.read_u16::<BigEndian>().unwrap();
+        let name_index = reader.read_u16::<BigEndian>().unwrap();
+        let descriptor_index = reader.read_u16::<BigEndian>().unwrap();
+        // let attributes = parse_attribute_info(reader, constant_pool);
+        fields.push(FieldInfo {
+            access_flag: access_flag,
+            name_index: name_index,
+            descriptor_index: descriptor_index,
+            attributes: HashMap::new(),
+        });
+    }
+
+    (fields_count, fields)
+}
+
+/// Parse attributes.
 fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) {
     let attribute_count = reader.read_u16::<BigEndian>().unwrap();
     let attributes: Vec<AttributeInfo> = Vec::new();
 
     for _ in 0..attribute_count {
         let attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
+        let attribute_name = match &constant_pool[attribute_name_index as usize]
+        {
+            CPInfo::ConstantUtf8 { bytes } => bytes.clone(),
+            _ => panic!("Expected attribute name to be CPInfo::ConstantUtf8"),
+        };
+        let attribute_length = reader.read_u32::<BigEndian>().unwrap();
+        if attribute_name == "ConstantValue" {}
+        println!("{:?}", attribute_name)
     }
 }
 
@@ -479,5 +534,14 @@ mod tests {
         for s in expected_strings {
             assert!(actual_strings.contains(&s.to_string()));
         }
+        println!("{:?}", class_file);
+    }
+    #[test]
+    fn can_check_attribute_name() {
+        let attr_info = AttributeInfo::ConstantValueAttribute {
+            constant_value_index: 12u16,
+            attribute_name: ATTRIBUTE_NAME_CONSTANT_VALUE.to_string(),
+        };
+        println!("{}", attr_info.attribute_name());
     }
 }
