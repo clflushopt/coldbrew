@@ -52,7 +52,7 @@ enum CPInfo {
         bytes: String,
     },
     ConstantMethodHandle {
-        reference_kind: u16,
+        reference_kind: u8,
         reference_index: u16,
     },
     ConstantMethodType {
@@ -181,7 +181,7 @@ enum AttributeInfo {
         max_stack: u16,
         max_locals: u16,
         code: Vec<u8>,
-        // Exception table.
+        exception_table:Vec<ExceptionEntry>,
         attributes: HashMap<String, AttributeInfo>,
         attribute_name: String,
     },
@@ -383,7 +383,32 @@ impl JVMParser {
                     };
                     constant_pool[ii] = value;
                 }
-                _ => println!("found : {}", tag),
+                ConstantKind::MethodHandle => {
+                    let ref_kind = buffer.read_u8().unwrap();
+                    let ref_index = buffer.read_u16::<BigEndian>().unwrap();
+                    let value = CPInfo::ConstantMethodHandle {
+                        reference_kind:ref_kind,
+                        reference_index:ref_index,
+                    };
+                    constant_pool[ii] = value;
+                }
+                ConstantKind::MethodType => {
+                    let desc_index = buffer.read_u16::<BigEndian>().unwrap();
+                    let value = CPInfo::ConstantMethodType {
+                        descriptor_index: desc_index,
+                    };
+                    constant_pool[ii] = value;
+                }
+                ConstantKind::InvokeDynamic => {
+                    let bootstrap_method_attr_index = buffer.read_u16::<BigEndian>().unwrap();
+                    let name_and_type_index = buffer.read_u16::<BigEndian>().unwrap();
+                    let value = CPInfo::ConstantInvokeDynamic {
+                        bootstrap_method_attr_index: bootstrap_method_attr_index,
+                        name_and_type_index: name_and_type_index,
+                    };
+                    constant_pool[ii] = value;
+                }
+                _ => panic!("Unexpected constant kind"),
             }
         }
 
@@ -400,6 +425,8 @@ impl JVMParser {
         }
 
         let (fields_count, fields) = parse_fields(&mut buffer, &constant_pool);
+
+        // let attributes = parse_attribute_info(&mut buffer, &constant_pool);
 
         let jvm_class_file = JVMClassFile {
             magic: magic,
@@ -448,21 +475,69 @@ fn parse_fields(
 }
 
 /// Parse attributes.
-fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) {
+fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) -> HashMap<String, AttributeInfo> {
     let attribute_count = reader.read_u16::<BigEndian>().unwrap();
-    let attributes: Vec<AttributeInfo> = Vec::new();
+    let mut attributes: HashMap<String, AttributeInfo> = HashMap::new();
 
     for _ in 0..attribute_count {
-        let attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
-        let attribute_name = match &constant_pool[attribute_name_index as usize]
-        {
+        let mut attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
+        let attr_name = &constant_pool[attribute_name_index as usize];
+        let mut attribute_name = match attr_name         {
             CPInfo::ConstantUtf8 { bytes } => bytes.clone(),
-            _ => panic!("Expected attribute name to be CPInfo::ConstantUtf8"),
+            _ => panic!("Expected attribute name to be CPInfo::ConstantUtf8 got {:?}", attr_name),
         };
-        let attribute_length = reader.read_u32::<BigEndian>().unwrap();
-        if attribute_name == "ConstantValue" {}
+        let mut attribute_info : Option<AttributeInfo> = None;
+        let mut attribute_length = reader.read_u32::<BigEndian>().unwrap();
+
+        // TODO this can be done more idiomatically with a pattern match
+        if attribute_name == "ConstantValue" {
+            let const_value_index = reader.read_u16::<BigEndian>().unwrap();
+            attribute_info = Some(AttributeInfo::ConstantValueAttribute {
+                constant_value_index : const_value_index,
+                attribute_name : attribute_name.clone(),
+            });
+        }
+        if attribute_name == "Code" {
+            let max_stack = reader.read_u16::<BigEndian>().unwrap();
+            let max_locals = reader.read_u16::<BigEndian>().unwrap();
+            let code_length = reader.read_u32::<BigEndian>().unwrap();
+            let mut buf = vec![0u8;code_length as usize];
+            reader.read_exact(&mut buf);
+            let exception_table_length = reader.read_u16::<BigEndian>().unwrap();
+            let mut exception_table_entries : Vec<ExceptionEntry> = Vec::new();
+
+            for _ in 0..exception_table_length {
+                let start_pc = reader.read_u16::<BigEndian>().unwrap();
+                let end_pc = reader.read_u16::<BigEndian>().unwrap();
+                let handler_pc = reader.read_u16::<BigEndian>().unwrap();
+                let catch_type = reader.read_u16::<BigEndian>().unwrap();
+
+                exception_table_entries.push(ExceptionEntry{
+                    start_pc:start_pc,
+                    end_pc:end_pc,
+                    handler_pc:handler_pc,
+                    catch_type:catch_type,
+                });
+            }
+
+            attribute_info = Some(AttributeInfo::CodeAttribute{
+                max_stack:max_stack,
+                max_locals:max_locals,
+                code:buf,
+                exception_table: exception_table_entries,
+                attributes: parse_attribute_info(reader,constant_pool),
+                attribute_name:"Code".to_string(),
+            });
+
+        }
+
+        match attribute_info {
+            Some(attr) => { attributes.insert(attribute_name.clone(),attr); },
+            None => (),
+        }
         println!("{:?}", attribute_name)
     }
+    attributes
 }
 
 /// Helper function to read file into a buffer.
