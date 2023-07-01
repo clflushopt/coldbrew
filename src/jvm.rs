@@ -10,7 +10,7 @@ use std::path::Path;
 const JVM_CLASS_FILE_MAGIC: u32 = 0xCAFE_BABE;
 
 /// `CPInfo` represents constant pool entries,
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CPInfo {
     ConstantClass {
         name_index: u16,
@@ -68,7 +68,7 @@ enum CPInfo {
 
 /// `ConstantKind` encodes the kind of a constant in the constants pool.
 #[repr(u8)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ConstantKind {
     Class = 7,
     FieldRef = 9,
@@ -145,14 +145,14 @@ impl From<u8> for VerificationType {
 }
 
 /// Verification info struct.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct VerificationInfo {
     tag: VerificationType,
     cpool_index_or_offset: u16,
 }
 
 /// Stack map frame type.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum StackMapFrameType {
     Same,
     SameLocals,
@@ -164,7 +164,7 @@ enum StackMapFrameType {
 }
 
 /// Stack map frame.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct StackMapFrame {
     t: StackMapFrameType,
     offset_delta: u16,
@@ -173,14 +173,14 @@ struct StackMapFrame {
 }
 
 /// Bootstrap method.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct BootstrapMethod {
     method_ref: u16,
     arguments: Vec<u16>,
 }
 
 /// Exception table.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ExceptionEntry {
     start_pc: u16,
     end_pc: u16,
@@ -188,7 +188,7 @@ struct ExceptionEntry {
     catch_type: u16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum AttributeInfo {
     ConstantValueAttribute {
         constant_value_index: u16,
@@ -247,7 +247,7 @@ impl AttributeInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct FieldInfo {
     access_flag: u16,
     name_index: u16,
@@ -255,7 +255,7 @@ struct FieldInfo {
     attributes: HashMap<String, AttributeInfo>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct MethodInfo {
     access_flag: u16,
     name_index: u16,
@@ -310,116 +310,102 @@ impl JVMParser {
             let tag = buffer.read_u8()?;
             match ConstantKind::from(tag) {
                 ConstantKind::Class => {
-                    let value = CPInfo::ConstantClass {
+                    constant_pool[ii] = CPInfo::ConstantClass {
                         name_index: buffer.read_u16::<BigEndian>().unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::FieldRef => {
-                    let value = CPInfo::ConstantFieldRef {
+                    constant_pool[ii] = CPInfo::ConstantFieldRef {
                         class_index: buffer.read_u16::<BigEndian>().unwrap(),
                         name_and_type_index: buffer
                             .read_u16::<BigEndian>()
                             .unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::MethodRef => {
-                    let value = CPInfo::ConstantMethodRef {
+                    constant_pool[ii] = CPInfo::ConstantMethodRef {
                         class_index: buffer.read_u16::<BigEndian>().unwrap(),
                         name_and_type_index: buffer
                             .read_u16::<BigEndian>()
                             .unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::InterfaceMethodRef => {
-                    let value = CPInfo::ConstantInterfaceMethodRef {
+                    constant_pool[ii] = CPInfo::ConstantInterfaceMethodRef {
                         class_index: buffer.read_u16::<BigEndian>().unwrap(),
                         name_and_type_index: buffer
                             .read_u16::<BigEndian>()
                             .unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::String => {
-                    let value = CPInfo::ConstantString {
+                    constant_pool[ii] = CPInfo::ConstantString {
                         string_index: buffer.read_u16::<BigEndian>().unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::Integer => {
-                    let value = CPInfo::ConstantInteger {
+                    constant_pool[ii] = CPInfo::ConstantInteger {
                         bytes: buffer.read_u32::<BigEndian>().unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::Float => {
-                    let value = CPInfo::ConstantFloat {
+                    constant_pool[ii] = CPInfo::ConstantFloat {
                         bytes: buffer.read_u32::<BigEndian>().unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::Long => {
-                    let value = CPInfo::ConstantLong {
+                    constant_pool[ii] = CPInfo::ConstantLong {
                         hi_bytes: buffer.read_u32::<BigEndian>().unwrap(),
                         lo_bytes: buffer.read_u32::<BigEndian>().unwrap(),
                     };
-                    constant_pool[ii] = value;
                     ii += 1;
                 }
                 ConstantKind::Double => {
-                    let value = CPInfo::ConstantDouble {
+                    constant_pool[ii] = CPInfo::ConstantDouble {
                         hi_bytes: buffer.read_u32::<BigEndian>().unwrap(),
                         lo_bytes: buffer.read_u32::<BigEndian>().unwrap(),
                     };
-                    constant_pool[ii] = value;
                     ii += 1;
                 }
                 ConstantKind::NameAndType => {
-                    let value = CPInfo::ConstantNameAndType {
+                    constant_pool[ii] = CPInfo::ConstantNameAndType {
                         name_index: buffer.read_u16::<BigEndian>().unwrap(),
                         descriptor_index: buffer
                             .read_u16::<BigEndian>()
                             .unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::Utf8 => {
                     let length = buffer.read_u16::<BigEndian>().unwrap();
                     let mut buf = vec![0u8; length as usize];
                     buffer.read_exact(&mut buf).unwrap();
-                    let value = CPInfo::ConstantUtf8 {
+                    constant_pool[ii] = CPInfo::ConstantUtf8 {
                         bytes: String::from_utf8(buf).unwrap(),
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::MethodHandle => {
                     let ref_kind = buffer.read_u8().unwrap();
                     let ref_index = buffer.read_u16::<BigEndian>().unwrap();
-                    let value = CPInfo::ConstantMethodHandle {
+                    constant_pool[ii] = CPInfo::ConstantMethodHandle {
                         reference_kind: ref_kind,
                         reference_index: ref_index,
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::MethodType => {
                     let desc_index = buffer.read_u16::<BigEndian>().unwrap();
-                    let value = CPInfo::ConstantMethodType {
+                    constant_pool[ii] = CPInfo::ConstantMethodType {
                         descriptor_index: desc_index,
                     };
-                    constant_pool[ii] = value;
                 }
                 ConstantKind::InvokeDynamic => {
                     let bootstrap_method_attr_index =
                         buffer.read_u16::<BigEndian>().unwrap();
                     let name_and_type_index =
                         buffer.read_u16::<BigEndian>().unwrap();
-                    let value = CPInfo::ConstantInvokeDynamic {
+                    constant_pool[ii] = CPInfo::ConstantInvokeDynamic {
                         bootstrap_method_attr_index,
                         name_and_type_index,
                     };
-                    constant_pool[ii] = value;
                 }
                 _ => panic!("Unexpected constant kind"),
             }
@@ -531,107 +517,114 @@ fn parse_attribute_info(
                 "Expected attribute name to be CPInfo::ConstantUtf8 got {attr_name:?}",
             ),
         };
-        let mut attribute_info: Option<AttributeInfo> = None;
         let attribute_length = reader.read_u32::<BigEndian>().unwrap();
-        // TODO this can be done more idiomatically with a pattern match
-        if attribute_name == "ConstantValue" {
-            let const_value_index = reader.read_u16::<BigEndian>().unwrap();
-            attribute_info = Some(AttributeInfo::ConstantValueAttribute {
-                constant_value_index: const_value_index,
+        let attribute_info = match attribute_name.as_str() {
+            "ConstantValue" => Some(AttributeInfo::ConstantValueAttribute {
+                constant_value_index: reader.read_u16::<BigEndian>().unwrap(),
                 attribute_name: attribute_name.clone(),
-            });
-        } else if attribute_name == "Code" {
-            let max_stack = reader.read_u16::<BigEndian>().unwrap();
-            let max_locals = reader.read_u16::<BigEndian>().unwrap();
-            let code_length = reader.read_u32::<BigEndian>().unwrap();
-            let mut buf = vec![0u8; code_length as usize];
-            reader.read_exact(&mut buf).unwrap();
-            let exception_table_length =
-                reader.read_u16::<BigEndian>().unwrap();
-            let mut exception_table_entries: Vec<ExceptionEntry> = Vec::new();
-            for _ in 0..exception_table_length {
-                let start_pc = reader.read_u16::<BigEndian>().unwrap();
-                let end_pc = reader.read_u16::<BigEndian>().unwrap();
-                let handler_pc = reader.read_u16::<BigEndian>().unwrap();
-                let catch_type = reader.read_u16::<BigEndian>().unwrap();
+            }),
+            "Code" => {
+                let max_stack = reader.read_u16::<BigEndian>().unwrap();
+                let max_locals = reader.read_u16::<BigEndian>().unwrap();
+                let code_length = reader.read_u32::<BigEndian>().unwrap();
+                let mut buf = vec![0u8; code_length as usize];
+                reader.read_exact(&mut buf).unwrap();
+                let exception_table_length =
+                    reader.read_u16::<BigEndian>().unwrap();
+                let mut exception_table_entries: Vec<ExceptionEntry> =
+                    Vec::new();
+                for _ in 0..exception_table_length {
+                    let start_pc = reader.read_u16::<BigEndian>().unwrap();
+                    let end_pc = reader.read_u16::<BigEndian>().unwrap();
+                    let handler_pc = reader.read_u16::<BigEndian>().unwrap();
+                    let catch_type = reader.read_u16::<BigEndian>().unwrap();
 
-                exception_table_entries.push(ExceptionEntry {
-                    start_pc,
-                    end_pc,
-                    handler_pc,
-                    catch_type,
-                });
-            }
-            let (_, attributes) = parse_attribute_info(reader, constant_pool);
-            attribute_info = Some(AttributeInfo::CodeAttribute {
-                max_stack,
-                max_locals,
-                code: buf,
-                exception_table: exception_table_entries,
-                attributes,
-                attribute_name: "Code".to_string(),
-            });
-        } else if attribute_name == "StackMapTable" {
-            let number_of_entries = reader.read_u16::<BigEndian>().unwrap();
-            let mut stack_map_entries: Vec<StackMapFrame> = Vec::new();
-            for _ in 0..number_of_entries {
-                let tag = reader.read_u8().unwrap();
-                let frame = parse_stack_frame_entry(reader, tag);
-                stack_map_entries.push(frame);
-            }
-            attribute_info = Some(AttributeInfo::StackMapTableAttribute {
-                entries: stack_map_entries,
-                attribute_name: "StackMapTable".to_string(),
-            });
-        } else if attribute_name == "SourceFile" {
-            let source_file_index = reader.read_u16::<BigEndian>().unwrap();
-            attribute_info = Some(AttributeInfo::SourceFileAttribute {
-                source_file_index,
-                attribute_name: "SourceFile".to_string(),
-            });
-        } else if attribute_name == "BootstrapMethods" {
-            let num_bootstrap_methods = reader.read_u16::<BigEndian>().unwrap();
-            let mut bootstrap_method_table: Vec<BootstrapMethod> = Vec::new();
-
-            for _ in 0..num_bootstrap_methods {
-                let method_ref = reader.read_u16::<BigEndian>().unwrap();
-                let argument_count = reader.read_u16::<BigEndian>().unwrap();
-                let mut arguments = Vec::new();
-                for _ in 0..argument_count {
-                    let arg = reader.read_u16::<BigEndian>().unwrap();
-                    arguments.push(arg);
+                    exception_table_entries.push(ExceptionEntry {
+                        start_pc,
+                        end_pc,
+                        handler_pc,
+                        catch_type,
+                    });
                 }
-                bootstrap_method_table.push(BootstrapMethod {
-                    method_ref,
-                    arguments,
-                });
+                let (_, attributes) =
+                    parse_attribute_info(reader, constant_pool);
+                Some(AttributeInfo::CodeAttribute {
+                    max_stack,
+                    max_locals,
+                    code: buf,
+                    exception_table: exception_table_entries,
+                    attributes,
+                    attribute_name: "Code".to_string(),
+                })
             }
-            attribute_info = Some(AttributeInfo::BootstrapMethodsAttribute {
-                bootstrap_methods: bootstrap_method_table,
-                attribute_name: "BootstrapMethods".to_string(),
-            });
-        } else if attribute_name == "NestHost" {
-            let host_class_index = reader.read_u16::<BigEndian>().unwrap();
-            attribute_info = Some(AttributeInfo::NestHostAttribute {
-                host_class_index,
+            "StackMapTable" => {
+                let number_of_entries = reader.read_u16::<BigEndian>().unwrap();
+                let mut stack_map_entries: Vec<StackMapFrame> = Vec::new();
+                for _ in 0..number_of_entries {
+                    let tag = reader.read_u8().unwrap();
+                    let frame = parse_stack_frame_entry(reader, tag);
+                    stack_map_entries.push(frame);
+                }
+                Some(AttributeInfo::StackMapTableAttribute {
+                    entries: stack_map_entries,
+                    attribute_name: "StackMapTable".to_string(),
+                })
+            }
+            "SourceFile" => Some(AttributeInfo::SourceFileAttribute {
+                source_file_index: reader.read_u16::<BigEndian>().unwrap(),
+                attribute_name: "SourceFile".to_string(),
+            }),
+            "BootstrapMethods" => {
+                let num_bootstrap_methods =
+                    reader.read_u16::<BigEndian>().unwrap();
+                let mut bootstrap_method_table: Vec<BootstrapMethod> =
+                    Vec::new();
+
+                for _ in 0..num_bootstrap_methods {
+                    let method_ref = reader.read_u16::<BigEndian>().unwrap();
+                    let argument_count =
+                        reader.read_u16::<BigEndian>().unwrap();
+                    let mut arguments = Vec::new();
+                    for _ in 0..argument_count {
+                        let arg = reader.read_u16::<BigEndian>().unwrap();
+                        arguments.push(arg);
+                    }
+                    bootstrap_method_table.push(BootstrapMethod {
+                        method_ref,
+                        arguments,
+                    });
+                }
+
+                Some(AttributeInfo::BootstrapMethodsAttribute {
+                    bootstrap_methods: bootstrap_method_table,
+                    attribute_name: "BootstrapMethods".to_string(),
+                })
+            }
+            "NestHost" => Some(AttributeInfo::NestHostAttribute {
+                host_class_index: reader.read_u16::<BigEndian>().unwrap(),
                 attribute_name: "NestHost".to_string(),
-            });
-        } else if attribute_name == "NestMembers" {
-            let num_classes = reader.read_u16::<BigEndian>().unwrap();
-            let mut classes = Vec::new();
-            for _ in 0..num_classes {
-                let class_index = reader.read_u16::<BigEndian>().unwrap();
-                classes.push(class_index);
+            }),
+            "NestMembers" => {
+                let num_classes = reader.read_u16::<BigEndian>().unwrap();
+                let mut classes = Vec::new();
+                for _ in 0..num_classes {
+                    let class_index = reader.read_u16::<BigEndian>().unwrap();
+                    classes.push(class_index);
+                }
+                Some(AttributeInfo::NestMembersAttribute {
+                    classes,
+                    attribute_name: "NestMembers".to_string(),
+                })
             }
-            attribute_info = Some(AttributeInfo::NestMembersAttribute {
-                classes,
-                attribute_name: "NestMembers".to_string(),
-            });
-        } else {
-            reader
-                .seek(std::io::SeekFrom::Current(i64::from(attribute_length)))
-                .unwrap();
-        }
+            _ => {
+                reader
+                    .seek(std::io::SeekFrom::Current(i64::from(
+                        attribute_length,
+                    )))
+                    .unwrap();
+                None
+            }
+        };
         attribute_info.map_or((), |attr| {
             attributes.insert(attribute_name.clone(), attr);
         });
@@ -718,6 +711,9 @@ fn parse_verification_info(
 }
 
 /// Helper function to read file into a buffer.
+/// # Panics
+/// Function panics on any `File::open` error.
+#[must_use]
 pub fn read_class_file(fp: &Path) -> Vec<u8> {
     use std::fs::File;
     use std::io::prelude::*;
@@ -757,35 +753,198 @@ mod tests {
         let result = JVMParser::parse(&class_file_bytes);
         assert!(result.is_ok());
         let class_file = result.unwrap();
-        let expected_strings = vec![
-            "java/lang/Object",
-            "<init>",
-            "SingleFuncCall",
-            "(II)I",
-            "java/lang/System",
-            "Ljava/io/PrintStream;",
-            "java/io/PrintStream",
-            "println",
-            "(I)V",
-            "Code",
-            "LineNumberTable",
-            "main",
-            "([Ljava/lang/String;)V",
-            "SourceFile",
-            "SingleFuncCall.java",
-        ];
-        let mut actual_strings = Vec::new();
-        for constant in &class_file.constant_pool {
-            match constant {
-                CPInfo::ConstantUtf8 { bytes } => {
-                    actual_strings.push(bytes.clone())
-                }
-                _ => (),
-            }
-        }
-        for s in expected_strings {
-            assert!(actual_strings.contains(&s.to_string()));
-        }
-        println!("{:?}", class_file);
+        let expected_class_file = JVMClassFile {
+            magic: 3405691582,
+            minor_version: 0,
+            major_version: 63,
+            constant_pool_count: 31,
+            constant_pool: vec![
+                CPInfo::Unspecified,
+                CPInfo::ConstantMethodRef {
+                    class_index: 2,
+                    name_and_type_index: 3,
+                },
+                CPInfo::ConstantClass { name_index: 4 },
+                CPInfo::ConstantInterfaceMethodRef {
+                    class_index: 5,
+                    name_and_type_index: 6,
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "java/lang/Object".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "<init>".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "()V".to_string(),
+                },
+                CPInfo::ConstantMethodRef {
+                    class_index: 8,
+                    name_and_type_index: 9,
+                },
+                CPInfo::ConstantClass { name_index: 10 },
+                CPInfo::ConstantInterfaceMethodRef {
+                    class_index: 11,
+                    name_and_type_index: 12,
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "SingleFuncCall".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "add".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "(II)I".to_string(),
+                },
+                CPInfo::ConstantFieldRef {
+                    class_index: 14,
+                    name_and_type_index: 15,
+                },
+                CPInfo::ConstantClass { name_index: 16 },
+                CPInfo::ConstantInterfaceMethodRef {
+                    class_index: 17,
+                    name_and_type_index: 18,
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "java/lang/System".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "out".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "Ljava/io/PrintStream;".to_string(),
+                },
+                CPInfo::ConstantMethodRef {
+                    class_index: 20,
+                    name_and_type_index: 21,
+                },
+                CPInfo::ConstantClass { name_index: 22 },
+                CPInfo::ConstantInterfaceMethodRef {
+                    class_index: 23,
+                    name_and_type_index: 24,
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "java/io/PrintStream".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "println".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "(I)V".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "Code".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "LineNumberTable".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "main".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "([Ljava/lang/String;)V".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "SourceFile".to_string(),
+                },
+                CPInfo::ConstantUtf8 {
+                    bytes: "SingleFuncCall.java".to_string(),
+                },
+            ],
+            access_flags: 33,
+            this_class: 8,
+            super_class: 2,
+            interfaces_count: 0,
+            interfaces: vec![],
+            fields_count: 0,
+            fields: vec![],
+            methods_count: 3,
+            methods: vec![
+                MethodInfo {
+                    access_flag: 1,
+                    name_index: 5,
+                    descriptor_index: 6,
+                    attributes: HashMap::from([(
+                        "Code".to_string(),
+                        AttributeInfo::CodeAttribute {
+                            max_stack: 1,
+                            max_locals: 1,
+                            code: vec![42, 183, 0, 1, 177],
+                            exception_table: vec![],
+                            attributes: HashMap::new(),
+                            attribute_name: "Code".to_string(),
+                        },
+                    )]),
+                },
+                MethodInfo {
+                    access_flag: 9,
+                    name_index: 27,
+                    descriptor_index: 28,
+                    attributes: HashMap::from([(
+                        "Code".to_string(),
+                        AttributeInfo::CodeAttribute {
+                            max_stack: 2,
+                            max_locals: 2,
+                            code: vec![
+                                6, 5, 184, 0, 7, 60, 178, 0, 13, 27, 182, 0,
+                                19, 177,
+                            ],
+                            exception_table: vec![],
+                            attributes: HashMap::new(),
+                            attribute_name: "Code".to_string(),
+                        },
+                    )]),
+                },
+                MethodInfo {
+                    access_flag: 8,
+                    name_index: 11,
+                    descriptor_index: 12,
+                    attributes: HashMap::from([(
+                        "Code".to_string(),
+                        AttributeInfo::CodeAttribute {
+                            max_stack: 2,
+                            max_locals: 2,
+                            code: vec![26, 27, 96, 172],
+                            exception_table: vec![],
+                            attributes: HashMap::new(),
+                            attribute_name: "Code".to_string(),
+                        },
+                    )]),
+                },
+            ],
+            attributes_count: 1,
+            attributes: HashMap::from([(
+                "SourceFile".to_string(),
+                AttributeInfo::SourceFileAttribute {
+                    source_file_index: 30,
+                    attribute_name: "SourceFile".to_string(),
+                },
+            )]),
+        };
+
+        assert_eq!(class_file.magic, expected_class_file.magic);
+        assert_eq!(class_file.minor_version, expected_class_file.minor_version);
+        assert_eq!(class_file.major_version, expected_class_file.major_version);
+        assert_eq!(
+            class_file.constant_pool_count,
+            expected_class_file.constant_pool_count
+        );
+        assert_eq!(class_file.constant_pool, expected_class_file.constant_pool);
+        assert_eq!(class_file.access_flags, expected_class_file.access_flags);
+        assert_eq!(class_file.this_class, expected_class_file.this_class);
+        assert_eq!(class_file.super_class, expected_class_file.super_class);
+        assert_eq!(
+            class_file.interfaces_count,
+            expected_class_file.interfaces_count
+        );
+        assert_eq!(class_file.interfaces, expected_class_file.interfaces);
+        assert_eq!(class_file.fields_count, expected_class_file.fields_count);
+        assert_eq!(class_file.fields, expected_class_file.fields);
+        assert_eq!(class_file.methods_count, expected_class_file.methods_count);
+        assert_eq!(class_file.methods, expected_class_file.methods);
+        assert_eq!(
+            class_file.attributes_count,
+            expected_class_file.attributes_count
+        );
     }
 }
