@@ -236,13 +236,13 @@ impl AttributeInfo {
     // Returns default attribute name for an attribute.
     fn attribute_name(&self) -> &'static str {
         match self {
-            ConstantValueAttribute => "ConstantValue",
-            CodeAttribute => "Code",
-            StackMapTableAttribute => "StackMapTable",
-            SourceFileAttribute => "SourceFile",
-            BootstrapMethodsAttribute => "BootstrapMethods",
-            NestHostAttribute => "NestHost",
-            NestMembersAttribute => "NestMembers",
+            _ConstantValueAttribute => "ConstantValue",
+            _CodeAttribute => "Code",
+            _StackMapTableAttribute => "StackMapTable",
+            _SourceFileAttribute => "SourceFile",
+            _BootstrapMethodsAttribute => "BootstrapMethods",
+            _NestHostAttribute => "NestHost",
+            _NestMembersAttribute => "NestMembers",
         }
     }
 }
@@ -473,7 +473,7 @@ impl JVMParser {
 /// Parse fields.
 fn parse_fields(
     reader: &mut impl Read,
-    constant_pool: &[CPInfo],
+    _constant_pool: &[CPInfo],
 ) -> (u16, Vec<FieldInfo>) {
     let fields_count = reader.read_u16::<BigEndian>().unwrap();
     let mut fields: Vec<FieldInfo> = Vec::new();
@@ -503,9 +503,9 @@ fn parse_attribute_info(
     let mut attributes: HashMap<String, AttributeInfo> = HashMap::new();
 
     for _ in 0..attribute_count {
-        let mut attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
+        let attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
         let attr_name = &constant_pool[attribute_name_index as usize];
-        let mut attribute_name = match attr_name {
+        let attribute_name = match attr_name {
             CPInfo::ConstantUtf8 { bytes } => bytes.clone(),
             _ => panic!(
                 "Expected attribute name to be CPInfo::ConstantUtf8 got {:?}",
@@ -513,7 +513,7 @@ fn parse_attribute_info(
             ),
         };
         let mut attribute_info: Option<AttributeInfo> = None;
-        let mut attribute_length = reader.read_u32::<BigEndian>().unwrap();
+        let attribute_length = reader.read_u32::<BigEndian>().unwrap();
 
         // TODO this can be done more idiomatically with a pattern match
         if attribute_name == "ConstantValue" {
