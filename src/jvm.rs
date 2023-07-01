@@ -3,11 +3,11 @@ use byteorder::{BigEndian, ReadBytesExt};
 use std::collections::HashMap;
 
 use std::io;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Seek};
 use std::path::Path;
 
 /// Values of magic bytes of a JVM class file.
-const JVM_CLASS_FILE_MAGIC: u32 = 0xCAFEBABE;
+const JVM_CLASS_FILE_MAGIC: u32 = 0xCAFE_BABE;
 
 /// `CPInfo` represents constant pool entries,
 #[derive(Debug, Clone)]
@@ -93,21 +93,21 @@ enum ConstantKind {
 impl From<u8> for ConstantKind {
     fn from(v: u8) -> Self {
         match v {
-            1 => ConstantKind::Utf8,
-            3 => ConstantKind::Integer,
-            4 => ConstantKind::Float,
-            5 => ConstantKind::Long,
-            6 => ConstantKind::Double,
-            7 => ConstantKind::Class,
-            8 => ConstantKind::String,
-            9 => ConstantKind::FieldRef,
-            10 => ConstantKind::MethodRef,
-            12 => ConstantKind::InterfaceMethodRef,
-            15 => ConstantKind::MethodHandle,
-            16 => ConstantKind::MethodType,
-            17 => ConstantKind::Dynamic,
-            18 => ConstantKind::InvokeDynamic,
-            _ => ConstantKind::Unspecified,
+            1 => Self::Utf8,
+            3 => Self::Integer,
+            4 => Self::Float,
+            5 => Self::Long,
+            6 => Self::Double,
+            7 => Self::Class,
+            8 => Self::String,
+            9 => Self::FieldRef,
+            10 => Self::MethodRef,
+            12 => Self::InterfaceMethodRef,
+            15 => Self::MethodHandle,
+            16 => Self::MethodType,
+            17 => Self::Dynamic,
+            18 => Self::InvokeDynamic,
+            _ => Self::Unspecified,
         }
     }
 }
@@ -130,16 +130,16 @@ enum VerificationType {
 impl From<u8> for VerificationType {
     fn from(v: u8) -> Self {
         match v {
-            0 => VerificationType::TopVerification,
-            1 => VerificationType::IntegerVerification,
-            2 => VerificationType::FloatVerification,
-            3 => VerificationType::DoubleVerification,
-            4 => VerificationType::LongVerification,
-            5 => VerificationType::NullVerification,
-            6 => VerificationType::UninitializedThisVerification,
-            7 => VerificationType::ObjectVerification,
-            8 => VerificationType::UninitializedVerification,
-            _ => panic!("Unexpected verification type entry {}", v),
+            0 => Self::TopVerification,
+            1 => Self::IntegerVerification,
+            2 => Self::FloatVerification,
+            3 => Self::DoubleVerification,
+            4 => Self::LongVerification,
+            5 => Self::NullVerification,
+            6 => Self::UninitializedThisVerification,
+            7 => Self::ObjectVerification,
+            8 => Self::UninitializedVerification,
+            _ => panic!("Unexpected verification type entry {v}"),
         }
     }
 }
@@ -224,25 +224,25 @@ enum AttributeInfo {
     },
 }
 
-const ATTRIBUTE_NAME_CONSTANT_VALUE: &'static str = "ConstantValue";
-const ATTRIBUTE_NAME_CODE: &'static str = "Code";
-const ATTRIBUTE_NAME_STACK_MAP_TABLE: &'static str = "StackmapTable";
-const ATTRIBUTE_NAME_SOURCE_FILE: &'static str = "SourceFile";
-const ATTRIBUTE_NAME_BOOTSTRAP_METHODS: &'static str = "BootstrapMethods";
-const ATTRIBUTE_NAME_NEST_HOST: &'static str = "NestHost";
-const ATTRIBUTE_NAME_NEST_MEMBERS: &'static str = "NestMembers";
+const ATTRIBUTE_NAME_CONSTANT_VALUE: &str = "ConstantValue";
+const ATTRIBUTE_NAME_CODE: &str = "Code";
+const ATTRIBUTE_NAME_STACK_MAP_TABLE: &str = "StackmapTable";
+const ATTRIBUTE_NAME_SOURCE_FILE: &str = "SourceFile";
+const ATTRIBUTE_NAME_BOOTSTRAP_METHODS: &str = "BootstrapMethods";
+const ATTRIBUTE_NAME_NEST_HOST: &str = "NestHost";
+const ATTRIBUTE_NAME_NEST_MEMBERS: &str = "NestMembers";
 
 impl AttributeInfo {
     // Returns default attribute name for an attribute.
-    fn attribute_name(&self) -> &'static str {
+    const fn attribute_name(&self) -> &'static str {
         match self {
-            _ConstantValueAttribute => "ConstantValue",
-            _CodeAttribute => "Code",
-            _StackMapTableAttribute => "StackMapTable",
-            _SourceFileAttribute => "SourceFile",
-            _BootstrapMethodsAttribute => "BootstrapMethods",
-            _NestHostAttribute => "NestHost",
-            _NestMembersAttribute => "NestMembers",
+            Self::ConstantValueAttribute { .. } => "ConstantValue",
+            Self::CodeAttribute { .. } => "Code",
+            Self::StackMapTableAttribute { .. } => "StackMapTable",
+            Self::SourceFileAttribute { .. } => "SourceFile",
+            Self::BootstrapMethodsAttribute { .. } => "BootstrapMethods",
+            Self::NestHostAttribute { .. } => "NestHost",
+            Self::NestMembersAttribute { .. } => "NestMembers",
         }
     }
 }
@@ -289,14 +289,8 @@ pub struct JVMClassFile {
 pub struct JVMParser;
 
 impl JVMParser {
-    #[must_use]
-    // Creates a new JVMParser with a given Java class file to parse.
-    pub fn new() -> Self {
-        Self {}
-    }
-
     // Parse a preloaded Java class file.
-    fn parse(&self, class_file_bytes: &[u8]) -> io::Result<JVMClassFile> {
+    fn parse(class_file_bytes: &[u8]) -> io::Result<JVMClassFile> {
         // Create a new cursor on the class file bytes.
         let mut buffer = Cursor::new(class_file_bytes);
         // Read magic header..
@@ -422,9 +416,8 @@ impl JVMParser {
                     let name_and_type_index =
                         buffer.read_u16::<BigEndian>().unwrap();
                     let value = CPInfo::ConstantInvokeDynamic {
-                        bootstrap_method_attr_index:
-                            bootstrap_method_attr_index,
-                        name_and_type_index: name_and_type_index,
+                        bootstrap_method_attr_index,
+                        name_and_type_index,
                     };
                     constant_pool[ii] = value;
                 }
@@ -453,22 +446,22 @@ impl JVMParser {
             parse_attribute_info(&mut buffer, &constant_pool);
 
         let jvm_class_file = JVMClassFile {
-            magic: magic,
-            minor_version: minor_version,
-            major_version: major_version,
-            constant_pool_count: constant_pool_count,
-            constant_pool: constant_pool,
-            access_flags: access_flags,
-            this_class: this_class,
-            super_class: super_class,
-            interfaces_count: interfaces_count,
-            interfaces: interfaces,
-            fields_count: fields_count,
-            fields: fields,
-            methods_count: methods_count,
-            methods: methods,
-            attributes_count: attributes_count,
-            attributes: attributes,
+            magic,
+            minor_version,
+            major_version,
+            constant_pool_count,
+            constant_pool,
+            access_flags,
+            this_class,
+            super_class,
+            interfaces_count,
+            interfaces,
+            fields_count,
+            fields,
+            methods_count,
+            methods,
+            attributes_count,
+            attributes,
         };
         Ok(jvm_class_file)
     }
@@ -476,7 +469,7 @@ impl JVMParser {
 
 /// Parse fields.
 fn parse_fields(
-    reader: &mut impl Read,
+    reader: &mut (impl Read + Seek),
     constant_pool: &[CPInfo],
 ) -> (u16, Vec<FieldInfo>) {
     let fields_count = reader.read_u16::<BigEndian>().unwrap();
@@ -488,10 +481,10 @@ fn parse_fields(
         let descriptor_index = reader.read_u16::<BigEndian>().unwrap();
         let (_, attributes) = parse_attribute_info(reader, constant_pool);
         fields.push(FieldInfo {
-            access_flag: access_flag,
-            name_index: name_index,
-            descriptor_index: descriptor_index,
-            attributes: attributes,
+            access_flag,
+            name_index,
+            descriptor_index,
+            attributes,
         });
     }
 
@@ -500,7 +493,7 @@ fn parse_fields(
 
 /// Parse methods.
 fn parse_methods(
-    reader: &mut impl Read,
+    reader: &mut (impl Read + Seek),
     constant_pool: &[CPInfo],
 ) -> (u16, Vec<MethodInfo>) {
     let methods_count = reader.read_u16::<BigEndian>().unwrap();
@@ -512,10 +505,10 @@ fn parse_methods(
         let descriptor_index = reader.read_u16::<BigEndian>().unwrap();
         let (_, attributes) = parse_attribute_info(reader, constant_pool);
         methods.push(MethodInfo {
-            access_flag: access_flag,
-            name_index: name_index,
-            descriptor_index: descriptor_index,
-            attributes: attributes,
+            access_flag,
+            name_index,
+            descriptor_index,
+            attributes,
         });
     }
 
@@ -524,25 +517,22 @@ fn parse_methods(
 
 /// Parse attributes.
 fn parse_attribute_info(
-    reader: &mut impl Read,
+    reader: &mut (impl Read + Seek),
     constant_pool: &[CPInfo],
 ) -> (u16, HashMap<String, AttributeInfo>) {
     let attribute_count = reader.read_u16::<BigEndian>().unwrap();
     let mut attributes: HashMap<String, AttributeInfo> = HashMap::new();
-
     for _ in 0..attribute_count {
         let attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
         let attr_name = &constant_pool[attribute_name_index as usize];
         let attribute_name = match attr_name {
             CPInfo::ConstantUtf8 { bytes } => bytes.clone(),
             _ => panic!(
-                "Expected attribute name to be CPInfo::ConstantUtf8 got {:?}",
-                attr_name
+                "Expected attribute name to be CPInfo::ConstantUtf8 got {attr_name:?}",
             ),
         };
         let mut attribute_info: Option<AttributeInfo> = None;
         let attribute_length = reader.read_u32::<BigEndian>().unwrap();
-
         // TODO this can be done more idiomatically with a pattern match
         if attribute_name == "ConstantValue" {
             let const_value_index = reader.read_u16::<BigEndian>().unwrap();
@@ -555,11 +545,10 @@ fn parse_attribute_info(
             let max_locals = reader.read_u16::<BigEndian>().unwrap();
             let code_length = reader.read_u32::<BigEndian>().unwrap();
             let mut buf = vec![0u8; code_length as usize];
-            reader.read_exact(&mut buf);
+            reader.read_exact(&mut buf).unwrap();
             let exception_table_length =
                 reader.read_u16::<BigEndian>().unwrap();
             let mut exception_table_entries: Vec<ExceptionEntry> = Vec::new();
-
             for _ in 0..exception_table_length {
                 let start_pc = reader.read_u16::<BigEndian>().unwrap();
                 let end_pc = reader.read_u16::<BigEndian>().unwrap();
@@ -567,20 +556,19 @@ fn parse_attribute_info(
                 let catch_type = reader.read_u16::<BigEndian>().unwrap();
 
                 exception_table_entries.push(ExceptionEntry {
-                    start_pc: start_pc,
-                    end_pc: end_pc,
-                    handler_pc: handler_pc,
-                    catch_type: catch_type,
+                    start_pc,
+                    end_pc,
+                    handler_pc,
+                    catch_type,
                 });
             }
-
             let (_, attributes) = parse_attribute_info(reader, constant_pool);
             attribute_info = Some(AttributeInfo::CodeAttribute {
-                max_stack: max_stack,
-                max_locals: max_locals,
+                max_stack,
+                max_locals,
                 code: buf,
                 exception_table: exception_table_entries,
-                attributes: attributes,
+                attributes,
                 attribute_name: "Code".to_string(),
             });
         } else if attribute_name == "StackMapTable" {
@@ -588,68 +576,7 @@ fn parse_attribute_info(
             let mut stack_map_entries: Vec<StackMapFrame> = Vec::new();
             for _ in 0..number_of_entries {
                 let tag = reader.read_u8().unwrap();
-                let frame = match tag {
-                    0..=63 => StackMapFrame {
-                        t: StackMapFrameType::Same,
-                        offset_delta: 0,
-                        locals: vec![],
-                        stack: vec![],
-                    },
-                    64..=127 => StackMapFrame {
-                        t: StackMapFrameType::SameLocals,
-                        offset_delta: 0,
-                        locals: vec![],
-                        stack: parse_verification_info(reader, 1),
-                    },
-                    247 => StackMapFrame {
-                        t: StackMapFrameType::SameLocalsExtended,
-                        offset_delta: 0,
-                        locals: vec![],
-                        stack: parse_verification_info(reader, 1),
-                    },
-                    248 | 249 | 250 => StackMapFrame {
-                        t: StackMapFrameType::Chop,
-                        offset_delta: reader.read_u16::<BigEndian>().unwrap(),
-                        locals: vec![],
-                        stack: vec![],
-                    },
-                    251 => StackMapFrame {
-                        t: StackMapFrameType::SameExtended,
-                        offset_delta: reader.read_u16::<BigEndian>().unwrap(),
-                        locals: vec![],
-                        stack: vec![],
-                    },
-                    252 | 253 | 254 => StackMapFrame {
-                        t: StackMapFrameType::Append,
-                        offset_delta: reader.read_u16::<BigEndian>().unwrap(),
-                        locals: parse_verification_info(
-                            reader,
-                            (tag - 251).into(),
-                        ),
-                        stack: vec![],
-                    },
-                    255 => {
-                        let offset_delta =
-                            reader.read_u16::<BigEndian>().unwrap();
-                        let n_locals_entries =
-                            reader.read_u16::<BigEndian>().unwrap();
-                        let n_stack_entries =
-                            reader.read_u16::<BigEndian>().unwrap();
-                        StackMapFrame {
-                            t: StackMapFrameType::Full,
-                            offset_delta: offset_delta,
-                            locals: parse_verification_info(
-                                reader,
-                                n_locals_entries,
-                            ),
-                            stack: parse_verification_info(
-                                reader,
-                                n_stack_entries,
-                            ),
-                        }
-                    }
-                    _ => panic!("Unexpected tag entry {tag}"),
-                };
+                let frame = parse_stack_frame_entry(reader, tag);
                 stack_map_entries.push(frame);
             }
             attribute_info = Some(AttributeInfo::StackMapTableAttribute {
@@ -659,7 +586,7 @@ fn parse_attribute_info(
         } else if attribute_name == "SourceFile" {
             let source_file_index = reader.read_u16::<BigEndian>().unwrap();
             attribute_info = Some(AttributeInfo::SourceFileAttribute {
-                source_file_index: source_file_index,
+                source_file_index,
                 attribute_name: "SourceFile".to_string(),
             });
         } else if attribute_name == "BootstrapMethods" {
@@ -675,8 +602,8 @@ fn parse_attribute_info(
                     arguments.push(arg);
                 }
                 bootstrap_method_table.push(BootstrapMethod {
-                    method_ref: method_ref,
-                    arguments: arguments,
+                    method_ref,
+                    arguments,
                 });
             }
             attribute_info = Some(AttributeInfo::BootstrapMethodsAttribute {
@@ -686,7 +613,7 @@ fn parse_attribute_info(
         } else if attribute_name == "NestHost" {
             let host_class_index = reader.read_u16::<BigEndian>().unwrap();
             attribute_info = Some(AttributeInfo::NestHostAttribute {
-                host_class_index: host_class_index,
+                host_class_index,
                 attribute_name: "NestHost".to_string(),
             });
         } else if attribute_name == "NestMembers" {
@@ -697,23 +624,73 @@ fn parse_attribute_info(
                 classes.push(class_index);
             }
             attribute_info = Some(AttributeInfo::NestMembersAttribute {
-                classes: classes,
+                classes,
                 attribute_name: "NestMembers".to_string(),
             });
         } else {
-            let mut _sink_buffer = vec![0u8; attribute_length as usize];
-            reader.read_exact(&mut _sink_buffer).unwrap();
+            reader
+                .seek(std::io::SeekFrom::Current(i64::from(attribute_length)))
+                .unwrap();
         }
-
-        match attribute_info {
-            Some(attr) => {
-                attributes.insert(attribute_name.clone(), attr);
-            }
-            None => (),
-        }
-        println!("{:?}", attribute_name)
+        attribute_info.map_or((), |attr| {
+            attributes.insert(attribute_name.clone(), attr);
+        });
     }
     (attribute_count, attributes)
+}
+
+/// Helper function to parse the `StackMapFrameTable` entry give a tag.
+fn parse_stack_frame_entry(reader: &mut impl Read, tag: u8) -> StackMapFrame {
+    match tag {
+        0..=63 => StackMapFrame {
+            t: StackMapFrameType::Same,
+            offset_delta: 0,
+            locals: vec![],
+            stack: vec![],
+        },
+        64..=127 => StackMapFrame {
+            t: StackMapFrameType::SameLocals,
+            offset_delta: 0,
+            locals: vec![],
+            stack: parse_verification_info(reader, 1),
+        },
+        247 => StackMapFrame {
+            t: StackMapFrameType::SameLocalsExtended,
+            offset_delta: 0,
+            locals: vec![],
+            stack: parse_verification_info(reader, 1),
+        },
+        248 | 249 | 250 => StackMapFrame {
+            t: StackMapFrameType::Chop,
+            offset_delta: reader.read_u16::<BigEndian>().unwrap(),
+            locals: vec![],
+            stack: vec![],
+        },
+        251 => StackMapFrame {
+            t: StackMapFrameType::SameExtended,
+            offset_delta: reader.read_u16::<BigEndian>().unwrap(),
+            locals: vec![],
+            stack: vec![],
+        },
+        252 | 253 | 254 => StackMapFrame {
+            t: StackMapFrameType::Append,
+            offset_delta: reader.read_u16::<BigEndian>().unwrap(),
+            locals: parse_verification_info(reader, (tag - 251).into()),
+            stack: vec![],
+        },
+        255 => {
+            let offset_delta = reader.read_u16::<BigEndian>().unwrap();
+            let n_locals_entries = reader.read_u16::<BigEndian>().unwrap();
+            let n_stack_entries = reader.read_u16::<BigEndian>().unwrap();
+            StackMapFrame {
+                t: StackMapFrameType::Full,
+                offset_delta,
+                locals: parse_verification_info(reader, n_locals_entries),
+                stack: parse_verification_info(reader, n_stack_entries),
+            }
+        }
+        _ => panic!("Unexpected tag entry {tag}"),
+    }
 }
 
 /// Helper function parse verification info.
@@ -733,8 +710,8 @@ fn parse_verification_info(
             0
         };
         verifications.push(VerificationInfo {
-            tag: tag,
-            cpool_index_or_offset: cpool_index_or_offset,
+            tag,
+            cpool_index_or_offset,
         });
     }
     verifications
@@ -762,7 +739,7 @@ mod tests {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = Path::new(&env_var).join("support/SingleFuncCall.class");
         let class_file_bytes = read_class_file(&path);
-        let result = JVMParser::new().parse(&class_file_bytes);
+        let result = JVMParser::parse(&class_file_bytes);
         assert!(result.is_ok());
         let class_file = result.unwrap();
         assert_eq!(JVM_CLASS_FILE_MAGIC, class_file.magic);
@@ -777,7 +754,7 @@ mod tests {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = Path::new(&env_var).join("support/SingleFuncCall.class");
         let class_file_bytes = read_class_file(&path);
-        let result = JVMParser::new().parse(&class_file_bytes);
+        let result = JVMParser::parse(&class_file_bytes);
         assert!(result.is_ok());
         let class_file = result.unwrap();
         let expected_strings = vec![
@@ -810,13 +787,5 @@ mod tests {
             assert!(actual_strings.contains(&s.to_string()));
         }
         println!("{:?}", class_file);
-    }
-    #[test]
-    fn can_check_attribute_name() {
-        let attr_info = AttributeInfo::ConstantValueAttribute {
-            constant_value_index: 12u16,
-            attribute_name: ATTRIBUTE_NAME_CONSTANT_VALUE.to_string(),
-        };
-        println!("{}", attr_info.attribute_name());
     }
 }
