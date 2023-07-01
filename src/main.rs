@@ -3,12 +3,11 @@ use std::path::Path;
 
 fn main() {
     // What are the program components ?
-    // 1. Reads a Java class file.
+    // 1. Reads and parse Java class file.
     let path = Path::new("./support/SingleFuncCall.class");
     let class_file_bytes = read_class_file(path);
-    let result = JVMParser::parse(&class_file_bytes);
-    assert!(result.is_ok());
-    let class_file = result.unwrap();
+    let class_file = JVMParser::parse(&class_file_bytes)
+        .expect("JVMParser failed with some error");
     // 2. Passes bytecode to an Interpreter class
     // 3. Interepreter executes bytecode and records a trace.
     // 4. When trace is hot it is compiled to assembly

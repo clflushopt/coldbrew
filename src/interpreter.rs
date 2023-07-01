@@ -208,33 +208,6 @@ enum OPCode {
     Breakpoint,
 }
 
-/// Primitive types supported by the JVM.
-#[derive(Debug, Copy, Clone)]
-enum BaseTypeKind {
-    Int,
-    Long,
-    Float,
-    Double,
-    Void,
-    String,
-    List,
-}
-
-/// JVM value type.
-#[derive(Debug, Clone)]
-struct Type {
-    t: BaseTypeKind,
-    sub_t: Box<Type>,
-}
-
-/// JVM Values
-#[derive(Debug, Clone)]
-enum ValueKind {
-    Int(i32),
-    Long(i64),
-    Float(f32),
-    Double(f64),
-}
 /// `Interpreter` for a stack based virtual machine for JVM bytecode.
 pub struct Interpreter {
     // Actual stack used to execute bytecode instructions.

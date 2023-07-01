@@ -11,7 +11,7 @@ const JVM_CLASS_FILE_MAGIC: u32 = 0xCAFE_BABE;
 
 /// `CPInfo` represents constant pool entries,
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum CPInfo {
+pub enum CPInfo {
     ConstantClass {
         name_index: u16,
     },
@@ -166,7 +166,7 @@ enum StackMapFrameType {
 
 /// Stack map frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct StackMapFrame {
+pub struct StackMapFrame {
     t: StackMapFrameType,
     offset_delta: u16,
     locals: Vec<VerificationInfo>,
@@ -175,14 +175,14 @@ struct StackMapFrame {
 
 /// Bootstrap method.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct BootstrapMethod {
+pub struct BootstrapMethod {
     method_ref: u16,
     arguments: Vec<u16>,
 }
 
 /// Exception table.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ExceptionEntry {
+pub struct ExceptionEntry {
     start_pc: u16,
     end_pc: u16,
     handler_pc: u16,
@@ -190,7 +190,7 @@ struct ExceptionEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum AttributeInfo {
+pub enum AttributeInfo {
     ConstantValueAttribute {
         constant_value_index: u16,
         attribute_name: String,
@@ -249,7 +249,7 @@ impl AttributeInfo {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct FieldInfo {
+pub struct FieldInfo {
     access_flag: u16,
     name_index: u16,
     descriptor_index: u16,
@@ -257,11 +257,28 @@ struct FieldInfo {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct MethodInfo {
+pub struct MethodInfo {
     access_flag: u16,
     name_index: u16,
     descriptor_index: u16,
     attributes: HashMap<String, AttributeInfo>,
+}
+
+impl MethodInfo {
+    // Returns method info descriptor index.
+    pub fn descriptor_index(&self) -> u16 {
+        self.descriptor_index
+    }
+
+    // Returns method info name index.
+    pub fn name_index(&self) -> u16 {
+        self.name_index
+    }
+
+    // Returns a copy of the method info attributes.
+    pub fn attributes(&self) -> HashMap<String, AttributeInfo> {
+        self.attributes.clone()
+    }
 }
 
 /// `JVMClassFile` represents a Java class file.
@@ -283,6 +300,18 @@ pub struct JVMClassFile {
     methods: Vec<MethodInfo>,
     attributes_count: u16,
     attributes: HashMap<String, AttributeInfo>,
+}
+
+impl JVMClassFile {
+    /// Returns a copy of the underlying constant pool.
+    pub fn constant_pool(&self) -> Vec<CPInfo> {
+        self.constant_pool.clone()
+    }
+
+    /// Returns a copy of the underlying methods vector.
+    pub fn methods(&self) -> Vec<MethodInfo> {
+        self.methods.clone()
+    }
 }
 
 /// `JVMParser` namespaces functions that handle parsing of Java class files.
