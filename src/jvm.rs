@@ -281,7 +281,7 @@ pub struct JVMClassFile {
     methods_count: u16,
     methods: Vec<MethodInfo>,
     attributes_count: u16,
-    attributes: Vec<AttributeInfo>,
+    attributes: HashMap<String, AttributeInfo>,
 }
 
 /// `JVMParser` namespaces functions that handle parsing of Java class files.
@@ -446,7 +446,11 @@ impl JVMParser {
 
         let (fields_count, fields) = parse_fields(&mut buffer, &constant_pool);
 
-        // let attributes = parse_attribute_info(&mut buffer, &constant_pool);
+        let (methods_count, methods) =
+            parse_methods(&mut buffer, &constant_pool);
+
+        let (attributes_count, attributes) =
+            parse_attribute_info(&mut buffer, &constant_pool);
 
         let jvm_class_file = JVMClassFile {
             magic: magic,
@@ -461,10 +465,10 @@ impl JVMParser {
             interfaces: interfaces,
             fields_count: fields_count,
             fields: fields,
-            methods_count: 0,
-            methods: Vec::new(),
-            attributes_count: 0,
-            attributes: Vec::new(),
+            methods_count: methods_count,
+            methods: methods,
+            attributes_count: attributes_count,
+            attributes: attributes,
         };
         Ok(jvm_class_file)
     }
@@ -473,7 +477,7 @@ impl JVMParser {
 /// Parse fields.
 fn parse_fields(
     reader: &mut impl Read,
-    _constant_pool: &[CPInfo],
+    constant_pool: &[CPInfo],
 ) -> (u16, Vec<FieldInfo>) {
     let fields_count = reader.read_u16::<BigEndian>().unwrap();
     let mut fields: Vec<FieldInfo> = Vec::new();
@@ -482,23 +486,47 @@ fn parse_fields(
         let access_flag = reader.read_u16::<BigEndian>().unwrap();
         let name_index = reader.read_u16::<BigEndian>().unwrap();
         let descriptor_index = reader.read_u16::<BigEndian>().unwrap();
-        // let attributes = parse_attribute_info(reader, constant_pool);
+        let (_, attributes) = parse_attribute_info(reader, constant_pool);
         fields.push(FieldInfo {
             access_flag: access_flag,
             name_index: name_index,
             descriptor_index: descriptor_index,
-            attributes: HashMap::new(),
+            attributes: attributes,
         });
     }
 
     (fields_count, fields)
 }
 
+/// Parse methods.
+fn parse_methods(
+    reader: &mut impl Read,
+    constant_pool: &[CPInfo],
+) -> (u16, Vec<MethodInfo>) {
+    let methods_count = reader.read_u16::<BigEndian>().unwrap();
+    let mut methods: Vec<MethodInfo> = Vec::new();
+
+    for _ in 0..methods_count {
+        let access_flag = reader.read_u16::<BigEndian>().unwrap();
+        let name_index = reader.read_u16::<BigEndian>().unwrap();
+        let descriptor_index = reader.read_u16::<BigEndian>().unwrap();
+        let (_, attributes) = parse_attribute_info(reader, constant_pool);
+        methods.push(MethodInfo {
+            access_flag: access_flag,
+            name_index: name_index,
+            descriptor_index: descriptor_index,
+            attributes: attributes,
+        });
+    }
+
+    (methods_count, methods)
+}
+
 /// Parse attributes.
 fn parse_attribute_info(
     reader: &mut impl Read,
     constant_pool: &[CPInfo],
-) -> HashMap<String, AttributeInfo> {
+) -> (u16, HashMap<String, AttributeInfo>) {
     let attribute_count = reader.read_u16::<BigEndian>().unwrap();
     let mut attributes: HashMap<String, AttributeInfo> = HashMap::new();
 
@@ -546,12 +574,13 @@ fn parse_attribute_info(
                 });
             }
 
+            let (_, attributes) = parse_attribute_info(reader, constant_pool);
             attribute_info = Some(AttributeInfo::CodeAttribute {
                 max_stack: max_stack,
                 max_locals: max_locals,
                 code: buf,
                 exception_table: exception_table_entries,
-                attributes: parse_attribute_info(reader, constant_pool),
+                attributes: attributes,
                 attribute_name: "Code".to_string(),
             });
         } else if attribute_name == "StackMapTable" {
@@ -684,7 +713,7 @@ fn parse_attribute_info(
         }
         println!("{:?}", attribute_name)
     }
-    attributes
+    (attribute_count, attributes)
 }
 
 /// Helper function parse verification info.
