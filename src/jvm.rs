@@ -139,7 +139,7 @@ impl From<u8> for VerificationType {
             6 => VerificationType::UninitializedThisVerification,
             7 => VerificationType::ObjectVerification,
             8 => VerificationType::UninitializedVerification,
-            _ => panic!("Unexpected verification type entry {}",v),
+            _ => panic!("Unexpected verification type entry {}", v),
         }
     }
 }
@@ -198,7 +198,7 @@ enum AttributeInfo {
         max_stack: u16,
         max_locals: u16,
         code: Vec<u8>,
-        exception_table:Vec<ExceptionEntry>,
+        exception_table: Vec<ExceptionEntry>,
         attributes: HashMap<String, AttributeInfo>,
         attribute_name: String,
     },
@@ -230,7 +230,7 @@ const ATTRIBUTE_NAME_STACK_MAP_TABLE: &'static str = "StackmapTable";
 const ATTRIBUTE_NAME_SOURCE_FILE: &'static str = "SourceFile";
 const ATTRIBUTE_NAME_BOOTSTRAP_METHODS: &'static str = "BootstrapMethods";
 const ATTRIBUTE_NAME_NEST_HOST: &'static str = "NestHost";
-const ATTRIBUTE_NAME_NEST_MEMBERS: &'static str = "ConstantValue";
+const ATTRIBUTE_NAME_NEST_MEMBERS: &'static str = "NestMembers";
 
 impl AttributeInfo {
     // Returns default attribute name for an attribute.
@@ -404,8 +404,8 @@ impl JVMParser {
                     let ref_kind = buffer.read_u8().unwrap();
                     let ref_index = buffer.read_u16::<BigEndian>().unwrap();
                     let value = CPInfo::ConstantMethodHandle {
-                        reference_kind:ref_kind,
-                        reference_index:ref_index,
+                        reference_kind: ref_kind,
+                        reference_index: ref_index,
                     };
                     constant_pool[ii] = value;
                 }
@@ -417,10 +417,13 @@ impl JVMParser {
                     constant_pool[ii] = value;
                 }
                 ConstantKind::InvokeDynamic => {
-                    let bootstrap_method_attr_index = buffer.read_u16::<BigEndian>().unwrap();
-                    let name_and_type_index = buffer.read_u16::<BigEndian>().unwrap();
+                    let bootstrap_method_attr_index =
+                        buffer.read_u16::<BigEndian>().unwrap();
+                    let name_and_type_index =
+                        buffer.read_u16::<BigEndian>().unwrap();
                     let value = CPInfo::ConstantInvokeDynamic {
-                        bootstrap_method_attr_index: bootstrap_method_attr_index,
+                        bootstrap_method_attr_index:
+                            bootstrap_method_attr_index,
                         name_and_type_index: name_and_type_index,
                     };
                     constant_pool[ii] = value;
@@ -492,36 +495,42 @@ fn parse_fields(
 }
 
 /// Parse attributes.
-fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) -> HashMap<String, AttributeInfo> {
+fn parse_attribute_info(
+    reader: &mut impl Read,
+    constant_pool: &[CPInfo],
+) -> HashMap<String, AttributeInfo> {
     let attribute_count = reader.read_u16::<BigEndian>().unwrap();
     let mut attributes: HashMap<String, AttributeInfo> = HashMap::new();
 
     for _ in 0..attribute_count {
         let mut attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
         let attr_name = &constant_pool[attribute_name_index as usize];
-        let mut attribute_name = match attr_name         {
+        let mut attribute_name = match attr_name {
             CPInfo::ConstantUtf8 { bytes } => bytes.clone(),
-            _ => panic!("Expected attribute name to be CPInfo::ConstantUtf8 got {:?}", attr_name),
+            _ => panic!(
+                "Expected attribute name to be CPInfo::ConstantUtf8 got {:?}",
+                attr_name
+            ),
         };
-        let mut attribute_info : Option<AttributeInfo> = None;
+        let mut attribute_info: Option<AttributeInfo> = None;
         let mut attribute_length = reader.read_u32::<BigEndian>().unwrap();
 
         // TODO this can be done more idiomatically with a pattern match
         if attribute_name == "ConstantValue" {
             let const_value_index = reader.read_u16::<BigEndian>().unwrap();
             attribute_info = Some(AttributeInfo::ConstantValueAttribute {
-                constant_value_index : const_value_index,
-                attribute_name : attribute_name.clone(),
+                constant_value_index: const_value_index,
+                attribute_name: attribute_name.clone(),
             });
-        }
-        if attribute_name == "Code" {
+        } else if attribute_name == "Code" {
             let max_stack = reader.read_u16::<BigEndian>().unwrap();
             let max_locals = reader.read_u16::<BigEndian>().unwrap();
             let code_length = reader.read_u32::<BigEndian>().unwrap();
-            let mut buf = vec![0u8;code_length as usize];
+            let mut buf = vec![0u8; code_length as usize];
             reader.read_exact(&mut buf);
-            let exception_table_length = reader.read_u16::<BigEndian>().unwrap();
-            let mut exception_table_entries : Vec<ExceptionEntry> = Vec::new();
+            let exception_table_length =
+                reader.read_u16::<BigEndian>().unwrap();
+            let mut exception_table_entries: Vec<ExceptionEntry> = Vec::new();
 
             for _ in 0..exception_table_length {
                 let start_pc = reader.read_u16::<BigEndian>().unwrap();
@@ -529,101 +538,148 @@ fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) -> Has
                 let handler_pc = reader.read_u16::<BigEndian>().unwrap();
                 let catch_type = reader.read_u16::<BigEndian>().unwrap();
 
-                exception_table_entries.push(ExceptionEntry{
-                    start_pc:start_pc,
-                    end_pc:end_pc,
-                    handler_pc:handler_pc,
-                    catch_type:catch_type,
+                exception_table_entries.push(ExceptionEntry {
+                    start_pc: start_pc,
+                    end_pc: end_pc,
+                    handler_pc: handler_pc,
+                    catch_type: catch_type,
                 });
             }
 
-            attribute_info = Some(AttributeInfo::CodeAttribute{
-                max_stack:max_stack,
-                max_locals:max_locals,
-                code:buf,
+            attribute_info = Some(AttributeInfo::CodeAttribute {
+                max_stack: max_stack,
+                max_locals: max_locals,
+                code: buf,
                 exception_table: exception_table_entries,
-                attributes: parse_attribute_info(reader,constant_pool),
-                attribute_name:"Code".to_string(),
+                attributes: parse_attribute_info(reader, constant_pool),
+                attribute_name: "Code".to_string(),
             });
-
-        }
-        if attribute_name == "StackMapTable" {
+        } else if attribute_name == "StackMapTable" {
             let number_of_entries = reader.read_u16::<BigEndian>().unwrap();
-            let mut stack_map_entries : Vec<StackMapFrame> = Vec::new();
+            let mut stack_map_entries: Vec<StackMapFrame> = Vec::new();
             for _ in 0..number_of_entries {
                 let tag = reader.read_u8().unwrap();
                 let frame = match tag {
-                    0..=63 => {
-                        StackMapFrame{
-                            t: StackMapFrameType::Same,
-                            offset_delta: 0,
-                            locals:vec![],
-                            stack:vec![],
-                        }
+                    0..=63 => StackMapFrame {
+                        t: StackMapFrameType::Same,
+                        offset_delta: 0,
+                        locals: vec![],
+                        stack: vec![],
                     },
-                    64..=127 => {
-                        StackMapFrame {
-                            t: StackMapFrameType::SameLocals,
-                            offset_delta:0,
-                            locals:vec![],
-                            stack:parse_verification_info(reader,1),
-                        }
+                    64..=127 => StackMapFrame {
+                        t: StackMapFrameType::SameLocals,
+                        offset_delta: 0,
+                        locals: vec![],
+                        stack: parse_verification_info(reader, 1),
                     },
-                    247 => {
-                        StackMapFrame {
-                            t: StackMapFrameType::SameLocalsExtended,
-                            offset_delta:0,
-                            locals:vec![],
-                            stack:parse_verification_info(reader,1),
-                        }
+                    247 => StackMapFrame {
+                        t: StackMapFrameType::SameLocalsExtended,
+                        offset_delta: 0,
+                        locals: vec![],
+                        stack: parse_verification_info(reader, 1),
                     },
-                    248 | 249 | 250 => {
-                        StackMapFrame {
-                            t :StackMapFrameType::Chop,
-                            offset_delta:reader.read_u16::<BigEndian>().unwrap(),
-                            locals:vec![],
-                            stack:vec![],
-                        }
+                    248 | 249 | 250 => StackMapFrame {
+                        t: StackMapFrameType::Chop,
+                        offset_delta: reader.read_u16::<BigEndian>().unwrap(),
+                        locals: vec![],
+                        stack: vec![],
                     },
-                    251 => {
-                        StackMapFrame {
-                            t:StackMapFrameType::SameExtended,
-                            offset_delta:reader.read_u16::<BigEndian>().unwrap(),
-                            locals:vec![],
-                            stack:vec![],
-                        }
+                    251 => StackMapFrame {
+                        t: StackMapFrameType::SameExtended,
+                        offset_delta: reader.read_u16::<BigEndian>().unwrap(),
+                        locals: vec![],
+                        stack: vec![],
                     },
-                    252 | 253 | 254 => {
-                        StackMapFrame {
-                            t:StackMapFrameType::Append,
-                            offset_delta:reader.read_u16::<BigEndian>().unwrap(),
-                            locals:parse_verification_info(reader, (tag - 251).into()),
-                            stack:vec![],
-                        }
+                    252 | 253 | 254 => StackMapFrame {
+                        t: StackMapFrameType::Append,
+                        offset_delta: reader.read_u16::<BigEndian>().unwrap(),
+                        locals: parse_verification_info(
+                            reader,
+                            (tag - 251).into(),
+                        ),
+                        stack: vec![],
                     },
                     255 => {
-                        let offset_delta = reader.read_u16::<BigEndian>().unwrap();
-                        let n_locals_entries = reader.read_u16::<BigEndian>().unwrap();
-                        let n_stack_entries = reader.read_u16::<BigEndian>().unwrap();
+                        let offset_delta =
+                            reader.read_u16::<BigEndian>().unwrap();
+                        let n_locals_entries =
+                            reader.read_u16::<BigEndian>().unwrap();
+                        let n_stack_entries =
+                            reader.read_u16::<BigEndian>().unwrap();
                         StackMapFrame {
-                            t:StackMapFrameType::Full,
-                            offset_delta:offset_delta,
-                            locals:parse_verification_info(reader,n_locals_entries),
-                            stack:parse_verification_info(reader, n_stack_entries),
+                            t: StackMapFrameType::Full,
+                            offset_delta: offset_delta,
+                            locals: parse_verification_info(
+                                reader,
+                                n_locals_entries,
+                            ),
+                            stack: parse_verification_info(
+                                reader,
+                                n_stack_entries,
+                            ),
                         }
-                    },
+                    }
                     _ => panic!("Unexpected tag entry {tag}"),
                 };
                 stack_map_entries.push(frame);
             }
-            attribute_info= Some(AttributeInfo::StackMapTableAttribute{
-                entries : stack_map_entries,
+            attribute_info = Some(AttributeInfo::StackMapTableAttribute {
+                entries: stack_map_entries,
                 attribute_name: "StackMapTable".to_string(),
             });
+        } else if attribute_name == "SourceFile" {
+            let source_file_index = reader.read_u16::<BigEndian>().unwrap();
+            attribute_info = Some(AttributeInfo::SourceFileAttribute {
+                source_file_index: source_file_index,
+                attribute_name: "SourceFile".to_string(),
+            });
+        } else if attribute_name == "BootstrapMethods" {
+            let num_bootstrap_methods = reader.read_u16::<BigEndian>().unwrap();
+            let mut bootstrap_method_table: Vec<BootstrapMethod> = Vec::new();
+
+            for _ in 0..num_bootstrap_methods {
+                let method_ref = reader.read_u16::<BigEndian>().unwrap();
+                let argument_count = reader.read_u16::<BigEndian>().unwrap();
+                let mut arguments = Vec::new();
+                for _ in 0..argument_count {
+                    let arg = reader.read_u16::<BigEndian>().unwrap();
+                    arguments.push(arg);
+                }
+                bootstrap_method_table.push(BootstrapMethod {
+                    method_ref: method_ref,
+                    arguments: arguments,
+                });
+            }
+            attribute_info = Some(AttributeInfo::BootstrapMethodsAttribute {
+                bootstrap_methods: bootstrap_method_table,
+                attribute_name: "BootstrapMethods".to_string(),
+            });
+        } else if attribute_name == "NestHost" {
+            let host_class_index = reader.read_u16::<BigEndian>().unwrap();
+            attribute_info = Some(AttributeInfo::NestHostAttribute {
+                host_class_index: host_class_index,
+                attribute_name: "NestHost".to_string(),
+            });
+        } else if attribute_name == "NestMembers" {
+            let num_classes = reader.read_u16::<BigEndian>().unwrap();
+            let mut classes = Vec::new();
+            for _ in 0..num_classes {
+                let class_index = reader.read_u16::<BigEndian>().unwrap();
+                classes.push(class_index);
+            }
+            attribute_info = Some(AttributeInfo::NestMembersAttribute {
+                classes: classes,
+                attribute_name: "NestMembers".to_string(),
+            });
+        } else {
+            let mut _sink_buffer = vec![0u8; attribute_length as usize];
+            reader.read_exact(&mut _sink_buffer).unwrap();
         }
 
         match attribute_info {
-            Some(attr) => { attributes.insert(attribute_name.clone(),attr); },
+            Some(attr) => {
+                attributes.insert(attribute_name.clone(), attr);
+            }
             None => (),
         }
         println!("{:?}", attribute_name)
@@ -632,19 +688,24 @@ fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) -> Has
 }
 
 /// Helper function parse verification info.
-fn parse_verification_info(reader: &mut impl Read,num_entries:u16) -> Vec<VerificationInfo> {
-    let mut verifications : Vec<VerificationInfo> = Vec::new();
+fn parse_verification_info(
+    reader: &mut impl Read,
+    num_entries: u16,
+) -> Vec<VerificationInfo> {
+    let mut verifications: Vec<VerificationInfo> = Vec::new();
     for _ in 0..num_entries {
         let tag = VerificationType::from(reader.read_u8().unwrap());
-        let cpool_index_or_offset = if tag == VerificationType::ObjectVerification ||
-            tag == VerificationType::UninitializedVerification {
-                reader.read_u16::<BigEndian>().unwrap()
-            } else {
-                0
-            };
-        verifications.push(VerificationInfo{
+        let cpool_index_or_offset = if tag
+            == VerificationType::ObjectVerification
+            || tag == VerificationType::UninitializedVerification
+        {
+            reader.read_u16::<BigEndian>().unwrap()
+        } else {
+            0
+        };
+        verifications.push(VerificationInfo {
             tag: tag,
-            cpool_index_or_offset:cpool_index_or_offset,
+            cpool_index_or_offset: cpool_index_or_offset,
         });
     }
     verifications
