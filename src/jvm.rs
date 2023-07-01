@@ -1,7 +1,7 @@
-//! Lightweight implementation of a parser and decoder for JVM class files.
+//! Lightweight binary parser for Java class files.
 use byteorder::{BigEndian, ReadBytesExt};
-use std::collections::HashMap;
 
+use std::collections::HashMap;
 use std::io;
 use std::io::{Cursor, Read, Seek};
 use std::path::Path;
@@ -125,6 +125,7 @@ enum VerificationType {
     UninitializedThisVerification = 6,
     ObjectVerification = 7,
     UninitializedVerification = 8,
+    Unspecified,
 }
 
 impl From<u8> for VerificationType {
@@ -139,7 +140,7 @@ impl From<u8> for VerificationType {
             6 => Self::UninitializedThisVerification,
             7 => Self::ObjectVerification,
             8 => Self::UninitializedVerification,
-            _ => panic!("Unexpected verification type entry {v}"),
+            _ => Self::Unspecified,
         }
     }
 }
