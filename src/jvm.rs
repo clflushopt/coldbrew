@@ -114,7 +114,7 @@ impl From<u8> for ConstantKind {
 
 /// Verification type specifies the type of a single variable location or
 /// a single operand stack entry.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum VerificationType {
     TopVerification = 0,
     IntegerVerification = 1,
@@ -125,6 +125,23 @@ enum VerificationType {
     UninitializedThisVerification = 6,
     ObjectVerification = 7,
     UninitializedVerification = 8,
+}
+
+impl From<u8> for VerificationType {
+    fn from(v: u8) -> Self {
+        match v {
+            0 => VerificationType::TopVerification,
+            1 => VerificationType::IntegerVerification,
+            2 => VerificationType::FloatVerification,
+            3 => VerificationType::DoubleVerification,
+            4 => VerificationType::LongVerification,
+            5 => VerificationType::NullVerification,
+            6 => VerificationType::UninitializedThisVerification,
+            7 => VerificationType::ObjectVerification,
+            8 => VerificationType::UninitializedVerification,
+            _ => panic!("Unexpected verification type entry {}",v),
+        }
+    }
 }
 
 /// Verification info struct.
@@ -530,6 +547,80 @@ fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) -> Has
             });
 
         }
+        if attribute_name == "StackMapTable" {
+            let number_of_entries = reader.read_u16::<BigEndian>().unwrap();
+            let mut stack_map_entries : Vec<StackMapFrame> = Vec::new();
+            for _ in 0..number_of_entries {
+                let tag = reader.read_u8().unwrap();
+                let frame = match tag {
+                    0..=63 => {
+                        StackMapFrame{
+                            t: StackMapFrameType::Same,
+                            offset_delta: 0,
+                            locals:vec![],
+                            stack:vec![],
+                        }
+                    },
+                    64..=127 => {
+                        StackMapFrame {
+                            t: StackMapFrameType::SameLocals,
+                            offset_delta:0,
+                            locals:vec![],
+                            stack:parse_verification_info(reader,1),
+                        }
+                    },
+                    247 => {
+                        StackMapFrame {
+                            t: StackMapFrameType::SameLocalsExtended,
+                            offset_delta:0,
+                            locals:vec![],
+                            stack:parse_verification_info(reader,1),
+                        }
+                    },
+                    248 | 249 | 250 => {
+                        StackMapFrame {
+                            t :StackMapFrameType::Chop,
+                            offset_delta:reader.read_u16::<BigEndian>().unwrap(),
+                            locals:vec![],
+                            stack:vec![],
+                        }
+                    },
+                    251 => {
+                        StackMapFrame {
+                            t:StackMapFrameType::SameExtended,
+                            offset_delta:reader.read_u16::<BigEndian>().unwrap(),
+                            locals:vec![],
+                            stack:vec![],
+                        }
+                    },
+                    252 | 253 | 254 => {
+                        StackMapFrame {
+                            t:StackMapFrameType::Append,
+                            offset_delta:reader.read_u16::<BigEndian>().unwrap(),
+                            locals:parse_verification_info(reader, (tag - 251).into()),
+                            stack:vec![],
+                        }
+                    },
+                    255 => {
+                        let offset_delta = reader.read_u16::<BigEndian>().unwrap();
+                        let n_locals_entries = reader.read_u16::<BigEndian>().unwrap();
+                        let n_stack_entries = reader.read_u16::<BigEndian>().unwrap();
+                        StackMapFrame {
+                            t:StackMapFrameType::Full,
+                            offset_delta:offset_delta,
+                            locals:parse_verification_info(reader,n_locals_entries),
+                            stack:parse_verification_info(reader, n_stack_entries),
+                        }
+                    },
+                    _ => panic!("Unexpected tag entry {tag}"),
+                };
+                stack_map_entries.push(frame);
+            }
+            attribute_info= Some(AttributeInfo::StackMapTableAttribute{
+                entries : stack_map_entries,
+                attribute_name: "StackMapTable".to_string(),
+            });
+        }
 
         match attribute_info {
             Some(attr) => { attributes.insert(attribute_name.clone(),attr); },
@@ -538,6 +629,25 @@ fn parse_attribute_info(reader: &mut impl Read, constant_pool: &[CPInfo]) -> Has
         println!("{:?}", attribute_name)
     }
     attributes
+}
+
+/// Helper function parse verification info.
+fn parse_verification_info(reader: &mut impl Read,num_entries:u16) -> Vec<VerificationInfo> {
+    let mut verifications : Vec<VerificationInfo> = Vec::new();
+    for _ in 0..num_entries {
+        let tag = VerificationType::from(reader.read_u8().unwrap());
+        let cpool_index_or_offset = if tag == VerificationType::ObjectVerification ||
+            tag == VerificationType::UninitializedVerification {
+                reader.read_u16::<BigEndian>().unwrap()
+            } else {
+                0
+            };
+        verifications.push(VerificationInfo{
+            tag: tag,
+            cpool_index_or_offset:cpool_index_or_offset,
+        });
+    }
+    verifications
 }
 
 /// Helper function to read file into a buffer.
