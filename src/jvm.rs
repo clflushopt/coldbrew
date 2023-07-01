@@ -290,7 +290,7 @@ pub struct JVMParser;
 
 impl JVMParser {
     // Parse a preloaded Java class file.
-    fn parse(class_file_bytes: &[u8]) -> io::Result<JVMClassFile> {
+    pub fn parse(class_file_bytes: &[u8]) -> io::Result<JVMClassFile> {
         // Create a new cursor on the class file bytes.
         let mut buffer = Cursor::new(class_file_bytes);
         // Read magic header..
@@ -718,7 +718,7 @@ fn parse_verification_info(
 }
 
 /// Helper function to read file into a buffer.
-fn read_class_file(fp: &Path) -> Vec<u8> {
+pub fn read_class_file(fp: &Path) -> Vec<u8> {
     use std::fs::File;
     use std::io::prelude::*;
 
