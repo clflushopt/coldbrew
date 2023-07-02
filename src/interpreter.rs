@@ -1,4 +1,34 @@
-//! Interpreter for JVM bytecode.
+//! JVM bytecode definitions.
+use crate::program::{BaseTypeKind, Type};
+
+/// JVM value types.
+#[derive(Debug, Copy, Clone)]
+enum Value {
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+}
+
+impl Value {
+    /// Returns the type of the value.
+    pub fn t(&self) -> BaseTypeKind {
+        match self {
+            Self::Int(_) => BaseTypeKind::Int,
+            Self::Long(_) => BaseTypeKind::Long,
+            Self::Float(_) => BaseTypeKind::Float,
+            Self::Double(_) => BaseTypeKind::Double,
+        }
+    }
+}
+
+/// Bytecode instructions are composed of an opcode and list of optional
+/// arguments or parameters.
+#[derive(Debug, Clone)]
+struct Instruction {
+    mnemonic: OPCode,
+    params: Vec<Value>,
+}
 
 /// OPCodes supported by the JVM
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -206,14 +236,4 @@ enum OPCode {
     GotoW,
     JsrW,
     Breakpoint,
-}
-
-/// `Interpreter` for a stack based virtual machine for JVM bytecode.
-pub struct Interpreter {
-    // Actual stack used to execute bytecode instructions.
-    stack:Vec<u64>,
-    // Instruction stream.
-    instructions:Vec<u8>,
-    // Constants pool.
-    constants_pool:Vec<u64>,
 }

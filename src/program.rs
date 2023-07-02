@@ -23,15 +23,6 @@ pub struct Type {
     sub_t: Option<Box<Type>>,
 }
 
-/// JVM value types.
-#[derive(Debug, Copy, Clone)]
-enum Value {
-    Int(i32),
-    Long(i64),
-    Float(f32),
-    Double(f64),
-}
-
 /// Representation of Java programs that we want to run.
 #[derive(Debug, Clone)]
 pub struct Program {
@@ -238,18 +229,67 @@ mod tests {
         assert!(result.is_ok());
         let class_file = result.unwrap();
         let program = Program::new(&class_file);
-        println!("{:?}", program);
-    }
 
-    #[test]
-    fn can_decode_class_file_program() {
-        let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let path = Path::new(&env_var).join("support/Factorial.class");
-        let class_file_bytes = read_class_file(&path);
-        let result = JVMParser::parse(&class_file_bytes);
-        assert!(result.is_ok());
-        let class_file = result.unwrap();
-        let program = Program::new(&class_file);
-        println!("{:?}", program);
+        let methods = vec![
+            Method {
+                name_index: 27,
+                return_type: Type {
+                    t: BaseTypeKind::Void,
+                    sub_t: None,
+                },
+                arg_types: vec![Type {
+                    t: BaseTypeKind::List,
+                    sub_t: Some(Box::new(Type {
+                        t: BaseTypeKind::String,
+                        sub_t: None,
+                    })),
+                }],
+                max_stack: 2,
+                max_locals: 2,
+                code: vec![
+                    16, 12, 184, 0, 7, 60, 178, 0, 13, 27, 182, 0, 19, 177,
+                ],
+                constant: None,
+                stack_map_table: None,
+            },
+            Method {
+                name_index: 5,
+                return_type: Type {
+                    t: BaseTypeKind::Void,
+                    sub_t: None,
+                },
+                arg_types: vec![],
+                max_stack: 1,
+                max_locals: 1,
+                code: vec![42, 183, 0, 1, 177],
+                constant: None,
+                stack_map_table: None,
+            },
+            Method {
+                name_index: 11,
+                return_type: Type {
+                    t: BaseTypeKind::Int,
+                    sub_t: None,
+                },
+                arg_types: vec![Type {
+                    t: BaseTypeKind::Int,
+                    sub_t: None,
+                }],
+                max_stack: 2,
+                max_locals: 3,
+                code: vec![
+                    4, 60, 5, 61, 28, 26, 163, 0, 13, 27, 28, 104, 60, 132, 2,
+                    1, 167, 255, 244, 27, 172,
+                ],
+                constant: None,
+                stack_map_table: None,
+            },
+        ];
+
+        for method in methods {
+            let name_index = method.name_index;
+            let program_method = program.methods.get(&name_index).unwrap();
+            assert_eq!(method.code, program_method.code);
+        }
     }
 }
