@@ -1,5 +1,5 @@
 use coldbrew::jvm::{read_class_file, JVMParser};
-use coldbrew::program::{Program};
+use coldbrew::program::Program;
 use std::path::Path;
 
 fn main() {

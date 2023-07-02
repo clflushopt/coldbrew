@@ -225,30 +225,7 @@ pub enum AttributeInfo {
     },
 }
 
-const ATTRIBUTE_NAME_CONSTANT_VALUE: &str = "ConstantValue";
-const ATTRIBUTE_NAME_CODE: &str = "Code";
-const ATTRIBUTE_NAME_STACK_MAP_TABLE: &str = "StackmapTable";
-const ATTRIBUTE_NAME_SOURCE_FILE: &str = "SourceFile";
-const ATTRIBUTE_NAME_BOOTSTRAP_METHODS: &str = "BootstrapMethods";
-const ATTRIBUTE_NAME_NEST_HOST: &str = "NestHost";
-const ATTRIBUTE_NAME_NEST_MEMBERS: &str = "NestMembers";
-
-impl AttributeInfo {
-    // Returns default attribute name for an attribute.
-    const fn attribute_name(&self) -> &'static str {
-        match self {
-            Self::ConstantValueAttribute { .. } => "ConstantValue",
-            Self::CodeAttribute { .. } => "Code",
-            Self::StackMapTableAttribute { .. } => "StackMapTable",
-            Self::SourceFileAttribute { .. } => "SourceFile",
-            Self::BootstrapMethodsAttribute { .. } => "BootstrapMethods",
-            Self::NestHostAttribute { .. } => "NestHost",
-            Self::NestMembersAttribute { .. } => "NestMembers",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldInfo {
     access_flag: u16,
     name_index: u16,
@@ -256,7 +233,7 @@ pub struct FieldInfo {
     attributes: HashMap<String, AttributeInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MethodInfo {
     access_flag: u16,
     name_index: u16,
@@ -265,17 +242,20 @@ pub struct MethodInfo {
 }
 
 impl MethodInfo {
-    // Returns method info descriptor index.
-    pub fn descriptor_index(&self) -> u16 {
+    /// Returns method info descriptor index.
+    #[must_use]
+    pub const fn descriptor_index(&self) -> u16 {
         self.descriptor_index
     }
 
-    // Returns method info name index.
-    pub fn name_index(&self) -> u16 {
+    /// Returns method info name index.
+    #[must_use]
+    pub const fn name_index(&self) -> u16 {
         self.name_index
     }
 
-    // Returns a copy of the method info attributes.
+    /// Returns a copy of the method info attributes.
+    #[must_use]
     pub fn attributes(&self) -> HashMap<String, AttributeInfo> {
         self.attributes.clone()
     }
@@ -304,11 +284,13 @@ pub struct JVMClassFile {
 
 impl JVMClassFile {
     /// Returns a copy of the underlying constant pool.
+    #[must_use]
     pub fn constant_pool(&self) -> Vec<CPInfo> {
         self.constant_pool.clone()
     }
 
     /// Returns a copy of the underlying methods vector.
+    #[must_use]
     pub fn methods(&self) -> Vec<MethodInfo> {
         self.methods.clone()
     }
@@ -319,7 +301,12 @@ impl JVMClassFile {
 pub struct JVMParser;
 
 impl JVMParser {
-    // Parse a preloaded Java class file.
+    /// Parse a Java class file.
+    /// # Errors
+    /// Returns `io::Error` in case a `std::io::Read` fails.
+    /// # Panics
+    /// Can panic if file isn't valid, since we don't handle some
+    /// `std::io::Read` failures.
     pub fn parse(class_file_bytes: &[u8]) -> io::Result<JVMClassFile> {
         // Create a new cursor on the class file bytes.
         let mut buffer = Cursor::new(class_file_bytes);
@@ -531,6 +518,42 @@ fn parse_methods(
     (methods_count, methods)
 }
 
+/// Parse code attribute
+fn parse_code_attribute(
+    reader: &mut (impl Read + Seek),
+    constant_pool: &[CPInfo],
+) -> AttributeInfo {
+    let max_stack = reader.read_u16::<BigEndian>().unwrap();
+    let max_locals = reader.read_u16::<BigEndian>().unwrap();
+    let code_length = reader.read_u32::<BigEndian>().unwrap();
+    let mut buf = vec![0u8; code_length as usize];
+    reader.read_exact(&mut buf).unwrap();
+    let exception_table_length = reader.read_u16::<BigEndian>().unwrap();
+    let mut exception_table_entries: Vec<ExceptionEntry> = Vec::new();
+    for _ in 0..exception_table_length {
+        let start_pc = reader.read_u16::<BigEndian>().unwrap();
+        let end_pc = reader.read_u16::<BigEndian>().unwrap();
+        let handler_pc = reader.read_u16::<BigEndian>().unwrap();
+        let catch_type = reader.read_u16::<BigEndian>().unwrap();
+
+        exception_table_entries.push(ExceptionEntry {
+            start_pc,
+            end_pc,
+            handler_pc,
+            catch_type,
+        });
+    }
+    let (_, attributes) = parse_attribute_info(reader, constant_pool);
+    AttributeInfo::CodeAttribute {
+        max_stack,
+        max_locals,
+        code: buf,
+        exception_table: exception_table_entries,
+        attributes,
+        attribute_name: "Code".to_string(),
+    }
+}
+
 /// Parse attributes.
 fn parse_attribute_info(
     reader: &mut (impl Read + Seek),
@@ -553,40 +576,7 @@ fn parse_attribute_info(
                 constant_value_index: reader.read_u16::<BigEndian>().unwrap(),
                 attribute_name: attribute_name.clone(),
             }),
-            "Code" => {
-                let max_stack = reader.read_u16::<BigEndian>().unwrap();
-                let max_locals = reader.read_u16::<BigEndian>().unwrap();
-                let code_length = reader.read_u32::<BigEndian>().unwrap();
-                let mut buf = vec![0u8; code_length as usize];
-                reader.read_exact(&mut buf).unwrap();
-                let exception_table_length =
-                    reader.read_u16::<BigEndian>().unwrap();
-                let mut exception_table_entries: Vec<ExceptionEntry> =
-                    Vec::new();
-                for _ in 0..exception_table_length {
-                    let start_pc = reader.read_u16::<BigEndian>().unwrap();
-                    let end_pc = reader.read_u16::<BigEndian>().unwrap();
-                    let handler_pc = reader.read_u16::<BigEndian>().unwrap();
-                    let catch_type = reader.read_u16::<BigEndian>().unwrap();
-
-                    exception_table_entries.push(ExceptionEntry {
-                        start_pc,
-                        end_pc,
-                        handler_pc,
-                        catch_type,
-                    });
-                }
-                let (_, attributes) =
-                    parse_attribute_info(reader, constant_pool);
-                Some(AttributeInfo::CodeAttribute {
-                    max_stack,
-                    max_locals,
-                    code: buf,
-                    exception_table: exception_table_entries,
-                    attributes,
-                    attribute_name: "Code".to_string(),
-                })
-            }
+            "Code" => Some(parse_code_attribute(reader, constant_pool)),
             "StackMapTable" => {
                 let number_of_entries = reader.read_u16::<BigEndian>().unwrap();
                 let mut stack_map_entries: Vec<StackMapFrame> = Vec::new();

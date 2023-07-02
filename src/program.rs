@@ -1,5 +1,5 @@
 //! Abstract representation of a Java program.
-use crate::jvm::*;
+use crate::jvm::{AttributeInfo, CPInfo, JVMClassFile, StackMapFrame};
 use std::collections::HashMap;
 
 use regex::Regex;
@@ -55,25 +55,25 @@ struct Method {
 }
 
 impl Program {
-    // Build a new program from a parsed class file.
+    /// Build a new program from a parsed class file.
+    /// # Panics
+    /// Can panic if class file is missing Code attribute.
+    #[must_use]
     pub fn new(class_file: &JVMClassFile) -> Self {
         let constants = class_file.constant_pool();
         let mut methods: HashMap<u16, Method> = HashMap::new();
         for method_info in &class_file.methods() {
             let mut arg_types: Vec<Type> = Vec::new();
-            let mut ret_type: Type = Type {
+            let mut return_type: Type = Type {
                 t: BaseTypeKind::Void,
                 sub_t: None,
             };
             let descriptor =
                 &constants[method_info.descriptor_index() as usize];
             let _method_name = &constants[method_info.name_index() as usize];
-            match descriptor {
-                CPInfo::ConstantUtf8 { bytes } => {
-                    println!("Utf8 bytes : {}", bytes);
-                    (arg_types, ret_type) = Program::parse_method_types(bytes);
-                }
-                _ => (),
+
+            if let CPInfo::ConstantUtf8 { bytes } = descriptor {
+                (arg_types, return_type) = Self::parse_method_types(bytes);
             }
             let attr = method_info.attributes();
 
@@ -114,13 +114,13 @@ impl Program {
 
             let method = Method {
                 name_index: method_info.name_index(),
-                return_type: ret_type,
-                arg_types: arg_types,
-                max_stack: max_stack,
-                max_locals: max_locals,
-                code: code,
-                constant: constant,
-                stack_map_table: stack_map_table,
+                return_type,
+                arg_types,
+                max_stack,
+                max_locals,
+                code,
+                constant,
+                stack_map_table,
             };
             methods.insert(method_info.name_index(), method);
         }
@@ -137,19 +137,19 @@ impl Program {
     // return types.
     fn parse_method_types(bytes: &str) -> (Vec<Type>, Type) {
         let re = Regex::new(r"\(([^\)]*)\)([^$]+)").unwrap();
-        let caps = re.captures(&bytes).unwrap();
+        let caps = re.captures(bytes).unwrap();
         let arg_string = caps.get(1).map_or("", |m| m.as_str());
         let return_type_string = caps.get(2).map_or("", |m| m.as_str());
         let mut types: Vec<Type> = Vec::new();
-        let ret_type = Program::decode_type(return_type_string);
+        let ret_type = Self::decode_type(return_type_string);
 
-        let mut arg_string_slice = &arg_string[..];
-        while arg_string_slice.len() > 0 {
-            let t = Program::decode_type(arg_string_slice);
+        let mut arg_string_slice = arg_string;
+        while !arg_string_slice.is_empty() {
+            let t = Self::decode_type(arg_string_slice);
             types.push(t.clone());
-            let length = Program::decode_type_string_length(&t);
+            let length = Self::decode_type_string_length(&t);
             arg_string_slice = substr(
-                &arg_string_slice,
+                arg_string_slice,
                 length,
                 arg_string_slice.len() - length,
             );
@@ -157,20 +157,23 @@ impl Program {
         (types, ret_type)
     }
 
-    // Get type string representation length.
+    /// Returns the type's string representation length.
+    /// # Panics
+    /// Function panics if class file has invalid representation for a list
+    /// type.
+    #[must_use]
     pub fn decode_type_string_length(t: &Type) -> usize {
         match t.t {
             BaseTypeKind::String => 18,
             BaseTypeKind::List => {
-                1 + Self::decode_type_string_length(
-                    &(t.sub_t.as_ref().unwrap()),
-                )
+                1 + Self::decode_type_string_length(t.sub_t.as_ref().unwrap())
             }
             _ => 1,
         }
     }
 
-    // Decode Java type from string.
+    /// Returns the Java equivalent type from a type's string representation.
+    #[must_use]
     pub fn decode_type(type_str: &str) -> Type {
         match &type_str[0..1] {
             "I" => Type {
@@ -222,6 +225,7 @@ fn substr(s: &str, start: usize, length: usize) -> &str {
 mod tests {
     use super::*;
 
+    use crate::jvm::{read_class_file, JVMParser};
     use std::env;
     use std::path::Path;
 
@@ -247,53 +251,5 @@ mod tests {
         let class_file = result.unwrap();
         let program = Program::new(&class_file);
         println!("{:?}", program);
-        /*
-        println!("{:?}", class_file);
-        let constants = class_file.constant_pool();
-
-        // let re = Regex::new(r"\(([^\\)]*)\)([^$]+)").unwrap();
-        //"\(([^\)]*)\)([^$]+)"
-        let re = Regex::new(r"\(([^\)]*)\)([^$]+)").unwrap();
-        // let mut methods: Vec<MethodInfo> = Vec::new();
-        let mut methods: HashMap<u16, Method> = HashMap::new();
-
-        for method_info in &class_file.methods() {
-            let mut arg_types: Vec<Type> = Vec::new();
-            let mut ret_type: Type = Type {
-                t: BaseTypeKind::Void,
-                sub_t: None,
-            };
-            let descriptor =
-                &constants[method_info.descriptor_index() as usize];
-            let method_name = &constants[method_info.name_index() as usize];
-            match descriptor {
-                CPInfo::ConstantUtf8 { bytes } => {
-                    println!("Utf8 bytes : {}", bytes);
-                    (arg_types, ret_type) = Program::parse_method_types(bytes);
-                }
-                _ => (),
-            }
-            let attr = method_info.attributes();
-            println!("Attribute : {:?}", attr);
-
-            let (max_stack,max_locals,code) = if let AttributeInfo::CodeAttribute{max_stack,max_locals,code,..} = &attr["Code"] {
-                    (*max_stack, *max_locals, code.clone())
-            } else {
-                panic!("Expected at least one code attribute")
-            };
-
-            let method = Method {
-                name_index: method_info.name_index(),
-                return_type: ret_type,
-                arg_types: arg_types,
-                max_stack: max_stack,
-                max_locals: max_locals,
-                code: code,
-            };
-            println!("Found method : {:?}", method);
-            methods.insert(method_info.name_index(), method);
-
-        }
-        */
     }
 }
