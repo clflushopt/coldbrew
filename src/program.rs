@@ -1,3 +1,4 @@
+//! Abstract representation of a Java program.
 use crate::jvm::*;
 use std::collections::HashMap;
 
@@ -5,7 +6,7 @@ use regex::Regex;
 
 /// Primitive types supported by the JVM.
 #[derive(Debug, Copy, Clone)]
-enum BaseTypeKind {
+pub enum BaseTypeKind {
     Int,
     Long,
     Float,
@@ -17,12 +18,12 @@ enum BaseTypeKind {
 
 /// JVM value type.
 #[derive(Debug, Clone)]
-struct Type {
+pub struct Type {
     t: BaseTypeKind,
     sub_t: Option<Box<Type>>,
 }
 
-/// JVM Values
+/// JVM value types.
 #[derive(Debug, Copy, Clone)]
 enum Value {
     Int(i32),
@@ -33,7 +34,7 @@ enum Value {
 
 /// Representation of Java programs that we want to run.
 #[derive(Debug, Clone)]
-struct Program {
+pub struct Program {
     // Constant pool.
     constant_pool: Vec<CPInfo>,
     // Methods.
@@ -66,7 +67,7 @@ impl Program {
             };
             let descriptor =
                 &constants[method_info.descriptor_index() as usize];
-            let method_name = &constants[method_info.name_index() as usize];
+            let _method_name = &constants[method_info.name_index() as usize];
             match descriptor {
                 CPInfo::ConstantUtf8 { bytes } => {
                     println!("Utf8 bytes : {}", bytes);
@@ -137,10 +138,10 @@ impl Program {
     fn parse_method_types(bytes: &str) -> (Vec<Type>, Type) {
         let re = Regex::new(r"\(([^\)]*)\)([^$]+)").unwrap();
         let caps = re.captures(&bytes).unwrap();
-        let mut arg_string = caps.get(1).map_or("", |m| m.as_str());
-        let mut return_type_string = caps.get(2).map_or("", |m| m.as_str());
+        let arg_string = caps.get(1).map_or("", |m| m.as_str());
+        let return_type_string = caps.get(2).map_or("", |m| m.as_str());
         let mut types: Vec<Type> = Vec::new();
-        let mut ret_type = Program::decode_type(return_type_string);
+        let ret_type = Program::decode_type(return_type_string);
 
         let mut arg_string_slice = &arg_string[..];
         while arg_string_slice.len() > 0 {
@@ -220,7 +221,7 @@ fn substr(s: &str, start: usize, length: usize) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jvm::*;
+
     use std::env;
     use std::path::Path;
 
