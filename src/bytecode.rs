@@ -30,7 +30,8 @@ struct Instruction {
     params: Vec<Value>,
 }
 
-/// OPCodes supported by the JVM
+/// OPCodes supported by the JVM as documented in the spec document.
+/// ref: https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-7.html
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum OPCode {
     NOP,
