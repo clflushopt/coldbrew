@@ -23,24 +23,35 @@ pub struct Type {
     sub_t: Option<Box<Type>>,
 }
 
+impl Type {
+    /// Returns the size in words of a given type.
+    fn size(&self) -> usize {
+        match self.t {
+            BaseTypeKind::Int | BaseTypeKind::Float  => 1,
+            BaseTypeKind::Long | BaseTypeKind::Double => 2,
+            _ => 0,
+        }
+    }
+}
+
 /// Representation of Java programs that we want to run.
 #[derive(Debug, Clone)]
 pub struct Program {
     // Constant pool.
-    constant_pool: Vec<CPInfo>,
+    pub constant_pool: Vec<CPInfo>,
     // Methods.
-    methods: HashMap<u16, Method>,
+    pub methods: HashMap<usize, Method>,
 }
 
 /// Java class method representation for the interpreter.
 #[derive(Debug, Clone)]
-struct Method {
+pub struct Method {
     name_index: u16,
     return_type: Type,
     arg_types: Vec<Type>,
     max_stack: u16,
     max_locals: u16,
-    code: Vec<u8>,
+    pub code: Vec<u8>,
     constant: Option<u16>,
     stack_map_table: Option<Vec<StackMapFrame>>,
 }
@@ -52,7 +63,7 @@ impl Program {
     #[must_use]
     pub fn new(class_file: &JVMClassFile) -> Self {
         let constants = class_file.constant_pool();
-        let mut methods: HashMap<u16, Method> = HashMap::new();
+        let mut methods: HashMap<usize, Method> = HashMap::new();
         for method_info in &class_file.methods() {
             let mut arg_types: Vec<Type> = Vec::new();
             let mut return_type: Type = Type {
@@ -113,7 +124,7 @@ impl Program {
                 constant,
                 stack_map_table,
             };
-            methods.insert(method_info.name_index(), method);
+            methods.insert(method_info.name_index() as usize, method);
         }
 
         Self {
@@ -126,13 +137,13 @@ impl Program {
 
     // Returns program entry point, in this case the index of the method
     // main.
-    pub fn entry_point(&self) -> u16 {
+    pub fn entry_point(&self) -> usize {
         for (index, method) in &self.methods {
             match self.constant_pool.get(*index as usize) {
                 Some(constant) => {
                     if let CPInfo::ConstantUtf8 { bytes } = constant {
                         if bytes == "main" {
-                            return *index;
+                            return *index as usize;
                         }
                     }
                 }
@@ -309,7 +320,8 @@ mod tests {
 
         for method in methods {
             let name_index = method.name_index;
-            let program_method = program.methods.get(&name_index).unwrap();
+            let program_method =
+                program.methods.get(&(name_index as usize)).unwrap();
             assert_eq!(method.code, program_method.code);
         }
         assert_eq!(program.entry_point(), 27);

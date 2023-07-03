@@ -12,8 +12,6 @@ fn main() {
         .expect("JVMParser failed with some error");
     // 2. Build abstract program from class file to run in the interpreter.
     let program = Program::new(&class_file);
-    println!("Class File : {class_file:?}");
-    println!("Program : {program:?}");
     // 3. Interepreter executes bytecode and records a trace.
     //  When trace is hot it is compiled to assembly
     //  Interpreter/Handler executes assembly and returns value

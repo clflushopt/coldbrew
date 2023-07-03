@@ -52,7 +52,7 @@ impl Value {
 #[derive(Debug, Clone)]
 struct Instruction {
     mnemonic: OPCode,
-    params: Vec<Value>,
+    params: Option<Vec<Value>>,
 }
 
 /// Program counter for the runtime points to the current instruction
@@ -113,17 +113,68 @@ impl Runtime {
             instruction_index: 0,
             method_index: main as usize,
         };
+        let initial_state = State {
+            pc: pc,
+            stack: Vec::new(),
+            locals: HashMap::new(),
+        };
         Self {
             program: program,
-            states: vec![State {
-                pc: pc,
-                stack: Vec::new(),
-                locals: HashMap::new(),
-            }],
+            states: vec![initial_state],
         }
     }
 
     pub fn run(&mut self) -> Result<()> {
+        while !self.states.is_empty() {
+            let next = self.next();
+            println!("Next instruction: {:?}", next);
+            self.eval(next);
+        }
         Ok(())
+    }
+
+    /// Evaluate a given instruction.
+    fn eval(&mut self, inst: Instruction) {
+        match self.states.last_mut() {
+            Some(state) => {
+                match inst.mnemonic {
+                    OPCode::IconstM1 => {
+                        println!("Executing IconstM1")
+                    },
+                    OPCode::NOP => (),
+                    OPCode::Return => {
+                        self.states.pop();
+                    },
+                    _ => todo!(),
+
+                }
+
+
+            },
+            None => (),
+        }
+    }
+
+
+    /// Returns the next instruction to execute.
+    fn next(&mut self) -> Instruction {
+        match self.states.last_mut() {
+            Some(state) => {
+                // TODO: use a method state.get_method_index();
+                let method_index = state.pc.method_index;
+                // TODO: return code as Vec<u8> we can clone for now
+                // solution would be to have the code as part of the
+                // runtime.
+                let code = &self.program.methods[&method_index].code;
+                let opcode = code[state.pc.instruction_index];
+                // TODO: use a method state.increment_instruction_index();
+                state.pc.instruction_index += 1;
+                Instruction {
+                    mnemonic: OPCode::from(opcode),
+                    params: None,
+                }
+            }
+            None => panic!("no next instruction"),
+        }
     }
 }
