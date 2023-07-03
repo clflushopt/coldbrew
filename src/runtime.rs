@@ -1,6 +1,9 @@
 //! JVM runtime module responsible for creating a new runtime
 //! environment and running programs.
-use crate::program;
+use crate::bytecode::OPCode;
+use crate::program::{BaseTypeKind, Program, Type};
+
+use std::collections::HashMap;
 use std::fmt;
 
 type Result<T> = std::result::Result<T, RuntimeError>;
@@ -21,6 +24,55 @@ impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "runtime error occured")
     }
+}
+
+/// JVM value types.
+#[derive(Debug, Copy, Clone)]
+enum Value {
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+}
+
+impl Value {
+    /// Returns the type of the value.
+    pub fn t(&self) -> BaseTypeKind {
+        match self {
+            Self::Int(_) => BaseTypeKind::Int,
+            Self::Long(_) => BaseTypeKind::Long,
+            Self::Float(_) => BaseTypeKind::Float,
+            Self::Double(_) => BaseTypeKind::Double,
+        }
+    }
+}
+
+/// Instructions are composed of an opcode and list of optional
+/// arguments or parameters.
+#[derive(Debug, Clone)]
+struct Instruction {
+    mnemonic: OPCode,
+    params: Vec<Value>,
+}
+
+/// Program counter for the runtime points to the current instruction
+/// and method we're executing.
+#[derive(Debug, Clone)]
+struct ProgramCounter {
+    instruction_index: usize,
+    method_index: usize,
+}
+
+/// Execution environment state for that encloses an execution scope.
+/// We create a new scope each time we start executing a new method and
+/// destroy it once we leave it.
+///
+/// The execution environment holds a program counter and a stack of values.
+#[derive(Debug, Clone)]
+struct State {
+    pc: ProgramCounter,
+    stack: Vec<Value>,
+    locals: HashMap<usize, Value>,
 }
 
 /// `Runtime` represents an execution context for JVM programs
@@ -48,13 +100,27 @@ pub struct Runtime {
     // Trace profiling statistics, indexed by the program counter
     // where each trace starts.
     // traces: Vec<Trace>,
+    program: Program,
+    states: Vec<State>,
 }
 
 impl Runtime {
     // TODO: considering moving Program to JVM module instead
     // to avoid repetition here and keeps things tight.
-    pub fn new(program: program::Program) -> Self {
-        Self {}
+    pub fn new(program: Program) -> Self {
+        let main = program.entry_point();
+        let pc = ProgramCounter {
+            instruction_index: 0,
+            method_index: main as usize,
+        };
+        Self {
+            program: program,
+            states: vec![State {
+                pc: pc,
+                stack: Vec::new(),
+                locals: HashMap::new(),
+            }],
+        }
     }
 
     pub fn run(&mut self) -> Result<()> {

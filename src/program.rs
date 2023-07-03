@@ -124,6 +124,27 @@ impl Program {
         }
     }
 
+    // Returns program entry point, in this case the index of the method
+    // main.
+    pub fn entry_point(&self) -> u16 {
+        for (index, method) in &self.methods {
+            match self.constant_pool.get(*index as usize) {
+                Some(constant) => {
+                    if let CPInfo::ConstantUtf8 { bytes } = constant {
+                        if bytes == "main" {
+                            return *index;
+                        }
+                    }
+                }
+                None => panic!("method \"main\" was not found"),
+            }
+        }
+        // This might cause some issues but since the input to our runtime
+        // is a class file that already passed the Java compiler we should
+        // assume a main function already exists.
+        0
+    }
+
     // Parse constant method types, returns a tuple of argument types and
     // return types.
     fn parse_method_types(bytes: &str) -> (Vec<Type>, Type) {
@@ -291,5 +312,6 @@ mod tests {
             let program_method = program.methods.get(&name_index).unwrap();
             assert_eq!(method.code, program_method.code);
         }
+        assert_eq!(program.entry_point(), 27);
     }
 }

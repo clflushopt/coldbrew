@@ -1,39 +1,9 @@
 //! JVM bytecode definitions.
-use crate::program::{BaseTypeKind, Type};
-
-/// JVM value types.
-#[derive(Debug, Copy, Clone)]
-enum Value {
-    Int(i32),
-    Long(i64),
-    Float(f32),
-    Double(f64),
-}
-
-impl Value {
-    /// Returns the type of the value.
-    pub fn t(&self) -> BaseTypeKind {
-        match self {
-            Self::Int(_) => BaseTypeKind::Int,
-            Self::Long(_) => BaseTypeKind::Long,
-            Self::Float(_) => BaseTypeKind::Float,
-            Self::Double(_) => BaseTypeKind::Double,
-        }
-    }
-}
-
-/// Bytecode instructions are composed of an opcode and list of optional
-/// arguments or parameters.
-#[derive(Debug, Clone)]
-struct Instruction {
-    mnemonic: OPCode,
-    params: Vec<Value>,
-}
 
 /// OPCodes supported by the JVM as documented in the spec document.
 /// ref: https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-7.html
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum OPCode {
+pub enum OPCode {
     NOP,
     AconstNULL,
     IconstM1,
