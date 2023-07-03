@@ -1,6 +1,5 @@
 //! JVM runtime module responsible for creating a new runtime
 //! environment and running programs.
-use crate::interpreter;
 use crate::program;
 use std::fmt;
 
