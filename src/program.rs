@@ -156,6 +156,11 @@ impl Program {
         0
     }
 
+    // Returns a slice containing code of method pointed at by `method_index`.
+    pub fn code(&self, method_index : usize) -> &[u8] {
+        &self.methods[&method_index].code
+    }
+
     // Parse constant method types, returns a tuple of argument types and
     // return types.
     fn parse_method_types(bytes: &str) -> (Vec<Type>, Type) {

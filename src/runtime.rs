@@ -75,6 +75,22 @@ struct State {
     locals: HashMap<usize, Value>,
 }
 
+impl State {
+    /// Returns current method index pointed at by the program counter.
+    fn method_index(&self) -> usize {
+        self.pc.method_index
+    }
+
+    /// Returns current instruction index pointed at by the program counter.
+    fn instruction_index(&self) -> usize {
+        self.pc.instruction_index
+    }
+    /// Increment program counter instruction index.
+    fn inc_instruction_index(&mut self) {
+        self.pc.instruction_index += 1
+    }
+}
+
 /// `Runtime` represents an execution context for JVM programs
 /// and is responsible for interpreting the program's instructions
 /// in a bytecode format, building execution traces and dispatching
@@ -145,7 +161,7 @@ impl Runtime {
                     OPCode::Return => {
                         self.states.pop();
                     },
-                    _ => todo!(),
+                    _ => (),
 
                 }
 
@@ -160,15 +176,10 @@ impl Runtime {
     fn next(&mut self) -> Instruction {
         match self.states.last_mut() {
             Some(state) => {
-                // TODO: use a method state.get_method_index();
-                let method_index = state.pc.method_index;
-                // TODO: return code as Vec<u8> we can clone for now
-                // solution would be to have the code as part of the
-                // runtime.
-                let code = &self.program.methods[&method_index].code;
-                let opcode = code[state.pc.instruction_index];
-                // TODO: use a method state.increment_instruction_index();
-                state.pc.instruction_index += 1;
+                let method_index = state.method_index();
+                let code = self.program.code(method_index);
+                let opcode = code[state.instruction_index()];
+                state.inc_instruction_index();
                 Instruction {
                     mnemonic: OPCode::from(opcode),
                     params: None,
