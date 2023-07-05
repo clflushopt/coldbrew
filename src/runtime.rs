@@ -149,13 +149,37 @@ impl Runtime {
         Ok(())
     }
 
+    /// Push a JVM value into the stack
+    fn push(&mut self, value: Value) {
+        match self.states.last_mut() {
+            Some(state) => {
+                state.stack.push(value);
+            },
+            _ => (),
+        }
+
+    }
+
     /// Evaluate a given instruction.
     fn eval(&mut self, inst: Instruction) {
         match self.states.last_mut() {
             Some(state) => {
                 match inst.mnemonic {
                     OPCode::IconstM1 => {
-                        println!("Executing IconstM1")
+                        println!("Executing IconstM1");
+                        self.push(Value::Int(-1))
+                    },
+                    OPCode::Iconst0 => {
+                        self.push(Value::Int(0))
+                    },
+                    OPCode::Iconst1 => {
+                        self.push(Value::Int(1))
+                    },
+                    OPCode::Iconst2 => {
+                        self.push(Value::Int(2))
+                    },
+                    OPCode::Iconst3 => {
+                        self.push(Value::Int(3))
                     },
                     OPCode::NOP => (),
                     OPCode::Return => {
