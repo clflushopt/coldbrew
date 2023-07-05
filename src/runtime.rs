@@ -37,7 +37,7 @@ enum Value {
 
 impl Value {
     /// Returns the type of the value.
-    pub fn t(&self) -> BaseTypeKind {
+    pub const fn t(&self) -> BaseTypeKind {
         match self {
             Self::Int(_) => BaseTypeKind::Int,
             Self::Long(_) => BaseTypeKind::Long,
@@ -77,17 +77,17 @@ struct State {
 
 impl State {
     /// Returns current method index pointed at by the program counter.
-    fn method_index(&self) -> usize {
+    const fn method_index(&self) -> usize {
         self.pc.method_index
     }
 
     /// Returns current instruction index pointed at by the program counter.
-    fn instruction_index(&self) -> usize {
+    const fn instruction_index(&self) -> usize {
         self.pc.instruction_index
     }
     /// Increment program counter instruction index.
     fn inc_instruction_index(&mut self) {
-        self.pc.instruction_index += 1
+        self.pc.instruction_index += 1;
     }
 }
 
@@ -127,7 +127,7 @@ impl Runtime {
         let main = program.entry_point();
         let pc = ProgramCounter {
             instruction_index: 0,
-            method_index: main as usize,
+            method_index: main,
         };
         let initial_state = State {
             pc: pc,
@@ -143,29 +143,26 @@ impl Runtime {
     pub fn run(&mut self) -> Result<()> {
         while !self.states.is_empty() {
             let inst = self.fetch();
-            println!("Next instruction: {:?}", inst);
-            self.eval(inst);
+            println!("Next instruction: {inst:?}");
+            self.eval(&inst);
         }
         Ok(())
     }
 
     /// Push a JVM value into the stack
     fn push(&mut self, value: Value) {
-        match self.states.last_mut() {
-            Some(state) => {
-                state.stack.push(value);
-            }
-            _ => (),
+        if let Some(state) = self.states.last_mut() {
+            state.stack.push(value);
         }
     }
 
     /// Evaluate a given instruction.
-    fn eval(&mut self, inst: Instruction) {
-        match self.states.last_mut() {
-            Some(state) => match inst.mnemonic {
+    fn eval(&mut self, inst: &Instruction) {
+        if let Some(state) = self.states.last_mut() {
+            match inst.mnemonic {
                 OPCode::IconstM1 => {
                     println!("Executing IconstM1");
-                    self.push(Value::Int(-1))
+                    self.push(Value::Int(-1));
                 }
                 OPCode::Iconst0 => self.push(Value::Int(0)),
                 OPCode::Iconst1 => self.push(Value::Int(1)),
@@ -180,20 +177,19 @@ impl Runtime {
                 OPCode::Fconst2 => self.push(Value::Float(2.)),
                 OPCode::Dconst0 => self.push(Value::Double(0.)),
                 OPCode::Dconst1 => self.push(Value::Double(1.)),
-                OPCode::NOP => (),
                 OPCode::Return => {
                     self.states.pop();
                 }
+                OPCode::NOP => (),
                 _ => (),
-            },
-            None => (),
+            }
         }
     }
 
     /// Returns the opcode parameter encoded as two `u8` values in the bytecode
     /// as an `i32`.
-    fn encode_arg(lo: u8, hi: u8) -> i32 {
-        ((lo as i16) << 8 | hi as i16) as i32
+    const fn encode_arg(lo: u8, hi: u8) -> i32 {
+        (lo as i32) << 8 | hi as i32
     }
 
     /// Returns the next bytecode value in the current method.
@@ -212,8 +208,8 @@ impl Runtime {
         let state = self.states.pop();
         match state {
             Some(mut state) => {
-                let opcode = OPCode::from(self.next(&mut state));
-                let params = match opcode {
+                let mnemonic = OPCode::from(self.next(&mut state));
+                let params = match mnemonic {
                     OPCode::SiPush
                     | OPCode::IfEq
                     | OPCode::IfNe
@@ -237,18 +233,15 @@ impl Runtime {
                     | OPCode::GetStatic
                     | OPCode::InvokeVirtual
                     | OPCode::IInc => {
-                        let first = self.next(&mut state) as i32;
-                        let second = self.next(&mut state) as i32;
+                        let first = i32::from(self.next(&mut state));
+                        let second = i32::from(self.next(&mut state));
                         Some(vec![Value::Int(first), Value::Int(second)])
                     }
                     _ => None,
                 };
                 self.states.push(state);
 
-                Instruction {
-                    mnemonic: OPCode::from(opcode),
-                    params: params,
-                }
+                Instruction { mnemonic, params }
             }
             None => panic!("no next instruction"),
         }
