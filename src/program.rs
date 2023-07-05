@@ -27,7 +27,7 @@ impl Type {
     /// Returns the size in words of a given type.
     fn size(&self) -> usize {
         match self.t {
-            BaseTypeKind::Int | BaseTypeKind::Float  => 1,
+            BaseTypeKind::Int | BaseTypeKind::Float => 1,
             BaseTypeKind::Long | BaseTypeKind::Double => 2,
             _ => 0,
         }
@@ -157,7 +157,7 @@ impl Program {
     }
 
     // Returns a slice containing code of method pointed at by `method_index`.
-    pub fn code(&self, method_index : usize) -> &[u8] {
+    pub fn code(&self, method_index: usize) -> &[u8] {
         &self.methods[&method_index].code
     }
 

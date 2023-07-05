@@ -142,9 +142,9 @@ impl Runtime {
 
     pub fn run(&mut self) -> Result<()> {
         while !self.states.is_empty() {
-            let next = self.next();
-            println!("Next instruction: {:?}", next);
-            self.eval(next);
+            let inst = self.fetch();
+            println!("Next instruction: {:?}", inst);
+            self.eval(inst);
         }
         Ok(())
     }
@@ -154,59 +154,100 @@ impl Runtime {
         match self.states.last_mut() {
             Some(state) => {
                 state.stack.push(value);
-            },
+            }
             _ => (),
         }
-
     }
 
     /// Evaluate a given instruction.
     fn eval(&mut self, inst: Instruction) {
         match self.states.last_mut() {
-            Some(state) => {
-                match inst.mnemonic {
-                    OPCode::IconstM1 => {
-                        println!("Executing IconstM1");
-                        self.push(Value::Int(-1))
-                    },
-                    OPCode::Iconst0 => {
-                        self.push(Value::Int(0))
-                    },
-                    OPCode::Iconst1 => {
-                        self.push(Value::Int(1))
-                    },
-                    OPCode::Iconst2 => {
-                        self.push(Value::Int(2))
-                    },
-                    OPCode::Iconst3 => {
-                        self.push(Value::Int(3))
-                    },
-                    OPCode::NOP => (),
-                    OPCode::Return => {
-                        self.states.pop();
-                    },
-                    _ => (),
-
+            Some(state) => match inst.mnemonic {
+                OPCode::IconstM1 => {
+                    println!("Executing IconstM1");
+                    self.push(Value::Int(-1))
                 }
-
-
+                OPCode::Iconst0 => self.push(Value::Int(0)),
+                OPCode::Iconst1 => self.push(Value::Int(1)),
+                OPCode::Iconst2 => self.push(Value::Int(2)),
+                OPCode::Iconst3 => self.push(Value::Int(3)),
+                OPCode::Iconst4 => self.push(Value::Int(4)),
+                OPCode::Iconst5 => self.push(Value::Int(5)),
+                OPCode::Lconst0 => self.push(Value::Long(0)),
+                OPCode::Lconst1 => self.push(Value::Long(1)),
+                OPCode::Fconst0 => self.push(Value::Float(0.)),
+                OPCode::Fconst1 => self.push(Value::Float(1.)),
+                OPCode::Fconst2 => self.push(Value::Float(2.)),
+                OPCode::Dconst0 => self.push(Value::Double(0.)),
+                OPCode::Dconst1 => self.push(Value::Double(1.)),
+                OPCode::NOP => (),
+                OPCode::Return => {
+                    self.states.pop();
+                }
+                _ => (),
             },
             None => (),
         }
     }
 
+    /// Returns the opcode parameter encoded as two `u8` values in the bytecode
+    /// as an `i32`.
+    fn encode_arg(lo: u8, hi: u8) -> i32 {
+        ((lo as i16) << 8 | hi as i16) as i32
+    }
+
+    /// Returns the next bytecode value in the current method.
+    fn next(&mut self, state: &mut State) -> u8 {
+        let method_index = state.method_index();
+        let code = self.program.code(method_index);
+        let bc = code[state.instruction_index()];
+        state.inc_instruction_index();
+        bc
+    }
 
     /// Returns the next instruction to execute.
-    fn next(&mut self) -> Instruction {
-        match self.states.last_mut() {
-            Some(state) => {
-                let method_index = state.method_index();
-                let code = self.program.code(method_index);
-                let opcode = code[state.instruction_index()];
-                state.inc_instruction_index();
+    fn fetch(&mut self) -> Instruction {
+        // Ugly hack, since we can't "borrow" state as mutable more than once
+        // we pop it out, do what we want then push it back.
+        let state = self.states.pop();
+        match state {
+            Some(mut state) => {
+                let opcode = OPCode::from(self.next(&mut state));
+                let params = match opcode {
+                    OPCode::SiPush
+                    | OPCode::IfEq
+                    | OPCode::IfNe
+                    | OPCode::IfLt
+                    | OPCode::IfLe
+                    | OPCode::IfGt
+                    | OPCode::IfGe
+                    | OPCode::IfICmpEq
+                    | OPCode::IfICmpNe
+                    | OPCode::IfICmpLt
+                    | OPCode::IfICmpLe
+                    | OPCode::IfICmpGt
+                    | OPCode::IfICmpGe
+                    | OPCode::Goto => {
+                        let lo = self.next(&mut state);
+                        let hi = self.next(&mut state);
+                        let param = Self::encode_arg(lo, hi);
+                        Some(vec![Value::Int(param)])
+                    }
+                    OPCode::InvokeStatic
+                    | OPCode::GetStatic
+                    | OPCode::InvokeVirtual
+                    | OPCode::IInc => {
+                        let first = self.next(&mut state) as i32;
+                        let second = self.next(&mut state) as i32;
+                        Some(vec![Value::Int(first), Value::Int(second)])
+                    }
+                    _ => None,
+                };
+                self.states.push(state);
+
                 Instruction {
                     mnemonic: OPCode::from(opcode),
-                    params: None,
+                    params: params,
                 }
             }
             None => panic!("no next instruction"),
