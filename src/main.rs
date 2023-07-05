@@ -6,7 +6,7 @@ use std::path::Path;
 fn main() {
     // What are the program components ?
     // 1. Reads and parse Java class file.
-    let path = Path::new("./support/SingleFuncCall.class");
+    let path = Path::new("./support/Factorial.class");
     let class_file_bytes = read_class_file(path);
     let class_file = JVMParser::parse(&class_file_bytes)
         .expect("JVMParser failed with some error");

@@ -135,6 +135,28 @@ impl Program {
         }
     }
 
+    // Find method name index in the constant pool by reference.
+    pub fn find_method(&self, method_ref: usize) -> usize {
+        match self.constant_pool[method_ref] {
+            CPInfo::ConstantMethodRef {
+                name_and_type_index,
+                ..
+            } => {
+                println!("Name and Type Index : {name_and_type_index}");
+                println!("{:?}", &self.constant_pool);
+                let cp = &self.constant_pool[name_and_type_index as usize];
+                println!("CP: {:?}", cp);
+                if let CPInfo::ConstantNameAndType { name_index, .. } =
+                    self.constant_pool[name_and_type_index as usize]
+                {
+                    return name_index as usize;
+                }
+                0
+            }
+            _ => panic!("Expected ConstantMethodRef"),
+        }
+    }
+
     // Returns program entry point, in this case the index of the method
     // main.
     pub fn entry_point(&self) -> usize {

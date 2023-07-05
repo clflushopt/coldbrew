@@ -229,13 +229,35 @@ impl Runtime {
                         let param = Self::encode_arg(lo, hi);
                         Some(vec![Value::Int(param)])
                     }
-                    OPCode::InvokeStatic
+                    OPCode::InvokeSpecial
                     | OPCode::GetStatic
                     | OPCode::InvokeVirtual
                     | OPCode::IInc => {
                         let first = i32::from(self.next(&mut state));
                         let second = i32::from(self.next(&mut state));
                         Some(vec![Value::Int(first), Value::Int(second)])
+                    }
+                    OPCode::BiPush
+                    | OPCode::ILoad
+                    | OPCode::FLoad
+                    | OPCode::LLoad
+                    | OPCode::DLoad
+                    | OPCode::IStore
+                    | OPCode::FStore
+                    | OPCode::LStore
+                    | OPCode::DStore => {
+                        let arg = i32::from(self.next(&mut state));
+                        Some(vec![Value::Int(arg)])
+                    }
+                    OPCode::InvokeStatic => {
+                        let lo = self.next(&mut state);
+                        let hi = self.next(&mut state);
+                        let method_ref_index =
+                            Self::encode_arg(lo, hi) as usize;
+                        println!("Method Ref Index: {method_ref_index}");
+                        let method_name_index =
+                            self.program.find_method(method_ref_index);
+                        Some(vec![Value::Int(method_name_index as i32)])
                     }
                     _ => None,
                 };
