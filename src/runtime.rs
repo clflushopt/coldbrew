@@ -156,6 +156,36 @@ impl Runtime {
         }
     }
 
+    /// Pop a JVM value from the stack.
+    fn pop(&mut self) -> Option<Value> {
+        match self.states.last_mut() {
+            Some(state) => state.stack.pop(),
+            None => None,
+        }
+    }
+
+    /// Store the topmost value in the stack as local value.
+    fn store(&mut self, index: usize) {
+        if let Some(value) = self.pop() {
+            match self.states.last_mut() {
+                Some(state) => {
+                    state.locals.insert(index, value);
+                }
+                None => (),
+            }
+        }
+    }
+
+    /// Load a local value and push it to the stack.
+    fn load(&mut self, index: usize) {
+        if let Some(state) = self.states.last_mut() {
+            match state.locals.get(&index) {
+                Some(value) => state.stack.push(*value),
+                None => (),
+            }
+        }
+    }
+
     /// Evaluate a given instruction.
     fn eval(&mut self, inst: &Instruction) {
         if let Some(state) = self.states.last_mut() {
@@ -177,29 +207,66 @@ impl Runtime {
                 OPCode::Fconst2 => self.push(Value::Float(2.)),
                 OPCode::Dconst0 => self.push(Value::Double(0.)),
                 OPCode::Dconst1 => self.push(Value::Double(1.)),
-                OPCode::BiPush | OPCode::SiPush | OPCode::Ldc | OPCode::Ldc2W => {
-                    match &inst.params {
-                        Some(params) => self.push(params[0]),
-                        None => panic!("Expected instruction to have parameters got None"),
-                    }
+                OPCode::BiPush
+                | OPCode::SiPush
+                | OPCode::Ldc
+                | OPCode::Ldc2W => match &inst.params {
+                    Some(params) => self.push(params[0]),
+                    None => panic!(
+                        "Expected instruction to have parameters got None"
+                    ),
                 },
                 // Load operations.
-                OPCode::ILoad | OPCode::LLoad | OPCode::FLoad | OPCode::DLoad => {
+                OPCode::ILoad
+                | OPCode::LLoad
+                | OPCode::FLoad
+                | OPCode::DLoad => {
                     todo!()
-                },
-                OPCode::ILoad0 | OPCode::LLoad0 | OPCode::FLoad0 | OPCode::DLoad0 => todo!(),
-                OPCode::ILoad1 | OPCode::LLoad1 | OPCode::FLoad1 | OPCode::DLoad1 => todo!(),
-                OPCode::ILoad2 | OPCode::LLoad2 | OPCode::FLoad2 | OPCode::DLoad2 => todo!(),
-                OPCode::ILoad3 | OPCode::LLoad3 | OPCode::FLoad3 | OPCode::DLoad3 => todo!(),
+                }
+                OPCode::ILoad0
+                | OPCode::LLoad0
+                | OPCode::FLoad0
+                | OPCode::DLoad0 => todo!(),
+                OPCode::ILoad1
+                | OPCode::LLoad1
+                | OPCode::FLoad1
+                | OPCode::DLoad1 => todo!(),
+                OPCode::ILoad2
+                | OPCode::LLoad2
+                | OPCode::FLoad2
+                | OPCode::DLoad2 => todo!(),
+                OPCode::ILoad3
+                | OPCode::LLoad3
+                | OPCode::FLoad3
+                | OPCode::DLoad3 => todo!(),
                 // Store operations.
-                OPCode::IStore | OPCode::LStore | OPCode::FStore | OPCode::DStore => todo!(),
-                OPCode::IStore1 | OPCode::LStore1 | OPCode::FStore1 | OPCode::DStore1 => todo!(),
-                OPCode::IStore2 | OPCode::LStore2 | OPCode::FStore2 | OPCode::DStore2 => todo!(),
-                OPCode::IStore3 | OPCode::LStore3 | OPCode::FStore3 | OPCode::DStore3 => todo!(),
+                OPCode::IStore
+                | OPCode::LStore
+                | OPCode::FStore
+                | OPCode::DStore => todo!(),
+                OPCode::IStore1
+                | OPCode::LStore1
+                | OPCode::FStore1
+                | OPCode::DStore1 => todo!(),
+                OPCode::IStore2
+                | OPCode::LStore2
+                | OPCode::FStore2
+                | OPCode::DStore2 => todo!(),
+                OPCode::IStore3
+                | OPCode::LStore3
+                | OPCode::FStore3
+                | OPCode::DStore3 => todo!(),
                 // Comparison operations.
-                OPCode::LCmp | OPCode::FCmpL | OPCode::FCmpG | OPCode::DCmpL | OPCode::DCmpG => todo!(),
+                OPCode::LCmp
+                | OPCode::FCmpL
+                | OPCode::FCmpG
+                | OPCode::DCmpL
+                | OPCode::DCmpG => todo!(),
                 // Return with value.
-                OPCode::IReturn | OPCode::LReturn | OPCode::FReturn | OPCode::DReturn => todo!(),
+                OPCode::IReturn
+                | OPCode::LReturn
+                | OPCode::FReturn
+                | OPCode::DReturn => todo!(),
                 // Void return
                 OPCode::Return => {
                     self.states.pop();
