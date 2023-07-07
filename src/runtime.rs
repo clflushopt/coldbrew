@@ -274,25 +274,33 @@ impl Runtime {
                 OPCode::ILoad
                 | OPCode::LLoad
                 | OPCode::FLoad
-                | OPCode::DLoad => {
-                    todo!()
-                }
+                | OPCode::DLoad => match &inst.params {
+                    Some(params) => match params[0] {
+                        Value::Int(v) => self.load(v as usize),
+                        _ => panic!(
+                            "Expected parameter to be of type Value::Int"
+                        ),
+                    },
+                    None => panic!(
+                        "Expected instruction to have parameters got None"
+                    ),
+                },
                 OPCode::ILoad0
                 | OPCode::LLoad0
                 | OPCode::FLoad0
-                | OPCode::DLoad0 => todo!(),
+                | OPCode::DLoad0 => self.load(0),
                 OPCode::ILoad1
                 | OPCode::LLoad1
                 | OPCode::FLoad1
-                | OPCode::DLoad1 => todo!(),
+                | OPCode::DLoad1 => self.load(1),
                 OPCode::ILoad2
                 | OPCode::LLoad2
                 | OPCode::FLoad2
-                | OPCode::DLoad2 => todo!(),
+                | OPCode::DLoad2 => self.load(2),
                 OPCode::ILoad3
                 | OPCode::LLoad3
                 | OPCode::FLoad3
-                | OPCode::DLoad3 => todo!(),
+                | OPCode::DLoad3 => self.load(3),
                 // Store operations.
                 OPCode::IStore
                 | OPCode::LStore
