@@ -99,6 +99,29 @@ impl Value {
             _ => panic!("Expected value type"),
         }
     }
+
+    /// Compares two values of the same type, returns 1 if rhs is greater than lhs
+    /// -1 if rhs is less than lhs and 0 otherwise.
+    pub fn cmp(lhs: &Value, rhs: &Value) -> i32 {
+        match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Self::compare(lhs, rhs),
+            (Value::Long(lhs), Value::Long(rhs)) => Self::compare(lhs, rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Self::compare(lhs, rhs),
+            (Value::Double(lhs), Value::Double(rhs)) => Self::compare(lhs, rhs),
+            _ => panic!("Expected value type"),
+        }
+    }
+
+    /// Comparison function for primitive types that implement `PartialOrd`.
+    fn compare<T: PartialOrd>(lhs: T, rhs: T) -> i32 {
+        if lhs < rhs {
+            -1
+        } else if rhs > lhs {
+            1
+        } else {
+            0
+        }
+    }
 }
 
 /// Instructions are composed of an opcode and list of optional
@@ -122,6 +145,8 @@ struct ProgramCounter {
 /// destroy it once we leave it.
 ///
 /// The execution environment holds a program counter and a stack of values.
+// TODO: refactor state to frame to be jvm compatible (semantically)
+// https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.6
 #[derive(Debug, Clone)]
 struct State {
     pc: ProgramCounter,
@@ -305,25 +330,49 @@ impl Runtime {
                 OPCode::IStore
                 | OPCode::LStore
                 | OPCode::FStore
-                | OPCode::DStore => todo!(),
+                | OPCode::DStore => match &inst.params {
+                    Some(params) => match params[0] {
+                        Value::Int(v) => self.store(v as usize),
+                        _ => panic!(
+                            "Expected parameter to be of type Value::Int"
+                        ),
+                    },
+                    None => panic!(
+                        "Expected instruction to have parameters got None"
+                    ),
+                },
+                OPCode::IStore0
+                | OPCode::LStore0
+                | OPCode::FStore0
+                | OPCode::DStore0 => self.store(0),
                 OPCode::IStore1
                 | OPCode::LStore1
                 | OPCode::FStore1
-                | OPCode::DStore1 => todo!(),
+                | OPCode::DStore1 => self.store(1),
                 OPCode::IStore2
                 | OPCode::LStore2
                 | OPCode::FStore2
-                | OPCode::DStore2 => todo!(),
+                | OPCode::DStore2 => self.store(2),
                 OPCode::IStore3
                 | OPCode::LStore3
                 | OPCode::FStore3
-                | OPCode::DStore3 => todo!(),
+                | OPCode::DStore3 => self.store(3),
                 // Comparison operations.
                 OPCode::LCmp
                 | OPCode::FCmpL
                 | OPCode::FCmpG
                 | OPCode::DCmpL
-                | OPCode::DCmpG => todo!(),
+                | OPCode::DCmpG => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+
+                    match (lhs, rhs) {
+                        (Some(a), Some(b)) => {
+                            self.push(Value::Int(Value::cmp(&a, &b)))
+                        }
+                        _ => (),
+                    }
+                }
                 // Return with value.
                 OPCode::IReturn
                 | OPCode::LReturn
@@ -337,6 +386,7 @@ impl Runtime {
                 _ => (),
             }
         }
+        println!("Frame state: {:?}", self.states);
     }
 
     /// Returns the opcode parameter encoded as two `u8` values in the bytecode
