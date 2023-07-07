@@ -45,6 +45,60 @@ impl Value {
             Self::Double(_) => BaseTypeKind::Double,
         }
     }
+    /// We could use operator overloading for all the arithmetic operators
+    /// but to keep things simple we chose to implement them as functions.
+
+    /// Computes the sum of two values of the same type}
+    pub fn add(lhs: &Value, rhs: &Value) -> Value {
+        match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs + rhs),
+            (Value::Long(lhs), Value::Long(rhs)) => Value::Long(lhs + rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs + rhs),
+            (Value::Double(lhs), Value::Double(rhs)) => {
+                Value::Double(lhs + rhs)
+            }
+            _ => panic!("Expected value type"),
+        }
+    }
+
+    /// Computes the difference of two values of the same type}
+    pub fn sub(lhs: &Value, rhs: &Value) -> Value {
+        match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs - rhs),
+            (Value::Long(lhs), Value::Long(rhs)) => Value::Long(lhs - rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs - rhs),
+            (Value::Double(lhs), Value::Double(rhs)) => {
+                Value::Double(lhs - rhs)
+            }
+            _ => panic!("Expected value type"),
+        }
+    }
+
+    /// Computes the product of two values of the same type}
+    pub fn mul(lhs: &Value, rhs: &Value) -> Value {
+        match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs * rhs),
+            (Value::Long(lhs), Value::Long(rhs)) => Value::Long(lhs * rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs * rhs),
+            (Value::Double(lhs), Value::Double(rhs)) => {
+                Value::Double(lhs * rhs)
+            }
+            _ => panic!("Expected value type"),
+        }
+    }
+
+    /// Computes the division of two values of the same type}
+    pub fn div(lhs: &Value, rhs: &Value) -> Value {
+        match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs / rhs),
+            (Value::Long(lhs), Value::Long(rhs)) => Value::Long(lhs / rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs / rhs),
+            (Value::Double(lhs), Value::Double(rhs)) => {
+                Value::Double(lhs / rhs)
+            }
+            _ => panic!("Expected value type"),
+        }
+    }
 }
 
 /// Instructions are composed of an opcode and list of optional
