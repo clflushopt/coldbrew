@@ -140,21 +140,16 @@ struct ProgramCounter {
     method_index: usize,
 }
 
-/// Execution environment state for that encloses an execution scope.
-/// We create a new scope each time we start executing a new method and
-/// destroy it once we leave it.
-///
-/// The execution environment holds a program counter and a stack of values.
-// TODO: refactor state to frame to be jvm compatible (semantically)
-// https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.6
+/// Frames are used to store data and partial results within a method's scope.
+/// Each frame has an operand stack and array of local variables.
 #[derive(Debug, Clone)]
-struct State {
+struct Frame {
     pc: ProgramCounter,
     stack: Vec<Value>,
     locals: HashMap<usize, Value>,
 }
 
-impl State {
+impl Frame {
     /// Returns current method index pointed at by the program counter.
     const fn method_index(&self) -> usize {
         self.pc.method_index
@@ -196,7 +191,7 @@ pub struct Runtime {
     // where each trace starts.
     // traces: Vec<Trace>,
     program: Program,
-    states: Vec<State>,
+    frames: Vec<Frame>,
 }
 
 impl Runtime {
@@ -208,19 +203,19 @@ impl Runtime {
             instruction_index: 0,
             method_index: main,
         };
-        let initial_state = State {
+        let initial_frame = Frame {
             pc: pc,
             stack: Vec::new(),
             locals: HashMap::new(),
         };
         Self {
             program: program,
-            states: vec![initial_state],
+            frames: vec![initial_frame],
         }
     }
 
     pub fn run(&mut self) -> Result<()> {
-        while !self.states.is_empty() {
+        while !self.frames.is_empty() {
             let inst = self.fetch();
             println!("Next instruction: {inst:?}");
             self.eval(&inst);
@@ -230,15 +225,15 @@ impl Runtime {
 
     /// Push a JVM value into the stack
     fn push(&mut self, value: Value) {
-        if let Some(state) = self.states.last_mut() {
-            state.stack.push(value);
+        if let Some(frame) = self.frames.last_mut() {
+            frame.stack.push(value);
         }
     }
 
     /// Pop a JVM value from the stack.
     fn pop(&mut self) -> Option<Value> {
-        match self.states.last_mut() {
-            Some(state) => state.stack.pop(),
+        match self.frames.last_mut() {
+            Some(frame) => frame.stack.pop(),
             None => None,
         }
     }
@@ -246,9 +241,9 @@ impl Runtime {
     /// Store the topmost value in the stack as local value.
     fn store(&mut self, index: usize) {
         if let Some(value) = self.pop() {
-            match self.states.last_mut() {
-                Some(state) => {
-                    state.locals.insert(index, value);
+            match self.frames.last_mut() {
+                Some(frame) => {
+                    frame.locals.insert(index, value);
                 }
                 None => (),
             }
@@ -257,9 +252,9 @@ impl Runtime {
 
     /// Load a local value and push it to the stack.
     fn load(&mut self, index: usize) {
-        if let Some(state) = self.states.last_mut() {
-            match state.locals.get(&index) {
-                Some(value) => state.stack.push(*value),
+        if let Some(frame) = self.frames.last_mut() {
+            match frame.locals.get(&index) {
+                Some(value) => frame.stack.push(*value),
                 None => (),
             }
         }
@@ -267,7 +262,7 @@ impl Runtime {
 
     /// Evaluate a given instruction.
     fn eval(&mut self, inst: &Instruction) {
-        if let Some(state) = self.states.last_mut() {
+        if let Some(frame) = self.frames.last_mut() {
             match inst.mnemonic {
                 OPCode::IconstM1 => {
                     println!("Executing IconstM1");
@@ -380,13 +375,13 @@ impl Runtime {
                 | OPCode::DReturn => todo!(),
                 // Void return
                 OPCode::Return => {
-                    self.states.pop();
+                    self.frames.pop();
                 }
                 OPCode::NOP => (),
                 _ => (),
             }
         }
-        println!("Frame state: {:?}", self.states);
+        println!("Frames : {:?}", self.frames);
     }
 
     /// Returns the opcode parameter encoded as two `u8` values in the bytecode
@@ -396,22 +391,22 @@ impl Runtime {
     }
 
     /// Returns the next bytecode value in the current method.
-    fn next(&mut self, state: &mut State) -> u8 {
-        let method_index = state.method_index();
+    fn next(&mut self, frame: &mut Frame) -> u8 {
+        let method_index = frame.method_index();
         let code = self.program.code(method_index);
-        let bc = code[state.instruction_index()];
-        state.inc_instruction_index();
+        let bc = code[frame.instruction_index()];
+        frame.inc_instruction_index();
         bc
     }
 
     /// Returns the next instruction to execute.
     fn fetch(&mut self) -> Instruction {
-        // Ugly hack, since we can't borrow state as mutable more than once
+        // Ugly hack, since we can't borrow frame as mutable more than once
         // we pop it out, do what we want then push it back.
-        let state = self.states.pop();
-        match state {
-            Some(mut state) => {
-                let mnemonic = OPCode::from(self.next(&mut state));
+        let current_frame = self.frames.pop();
+        match current_frame {
+            Some(mut frame) => {
+                let mnemonic = OPCode::from(self.next(&mut frame));
                 let params = match mnemonic {
                     OPCode::SiPush
                     | OPCode::IfEq
@@ -427,8 +422,8 @@ impl Runtime {
                     | OPCode::IfICmpGt
                     | OPCode::IfICmpGe
                     | OPCode::Goto => {
-                        let lo = self.next(&mut state);
-                        let hi = self.next(&mut state);
+                        let lo = self.next(&mut frame);
+                        let hi = self.next(&mut frame);
                         let param = Self::encode_arg(lo, hi);
                         Some(vec![Value::Int(param)])
                     }
@@ -436,8 +431,8 @@ impl Runtime {
                     | OPCode::GetStatic
                     | OPCode::InvokeVirtual
                     | OPCode::IInc => {
-                        let first = i32::from(self.next(&mut state));
-                        let second = i32::from(self.next(&mut state));
+                        let first = i32::from(self.next(&mut frame));
+                        let second = i32::from(self.next(&mut frame));
                         Some(vec![Value::Int(first), Value::Int(second)])
                     }
                     OPCode::BiPush
@@ -449,12 +444,12 @@ impl Runtime {
                     | OPCode::FStore
                     | OPCode::LStore
                     | OPCode::DStore => {
-                        let arg = i32::from(self.next(&mut state));
+                        let arg = i32::from(self.next(&mut frame));
                         Some(vec![Value::Int(arg)])
                     }
                     OPCode::InvokeStatic => {
-                        let lo = self.next(&mut state);
-                        let hi = self.next(&mut state);
+                        let lo = self.next(&mut frame);
+                        let hi = self.next(&mut frame);
                         let method_ref_index =
                             Self::encode_arg(lo, hi) as usize;
                         println!("Method Ref Index: {method_ref_index}");
@@ -464,7 +459,7 @@ impl Runtime {
                     }
                     _ => None,
                 };
-                self.states.push(state);
+                self.frames.push(frame);
 
                 println!("Mnemonic : {mnemonic}");
 
