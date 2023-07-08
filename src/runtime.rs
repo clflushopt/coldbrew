@@ -127,7 +127,7 @@ impl Value {
 /// Instructions are composed of an opcode and list of optional
 /// arguments or parameters.
 #[derive(Debug, Clone)]
-struct Instruction {
+pub struct Instruction {
     mnemonic: OPCode,
     params: Option<Vec<Value>>,
 }
@@ -406,7 +406,7 @@ impl Runtime {
 
     /// Returns the next instruction to execute.
     fn fetch(&mut self) -> Instruction {
-        // Ugly hack, since we can't "borrow" state as mutable more than once
+        // Ugly hack, since we can't borrow state as mutable more than once
         // we pop it out, do what we want then push it back.
         let state = self.states.pop();
         match state {
@@ -466,6 +466,8 @@ impl Runtime {
                 };
                 self.states.push(state);
 
+                println!("Mnemonic : {mnemonic}");
+
                 Instruction { mnemonic, params }
             }
             None => panic!("no next instruction"),
@@ -476,11 +478,22 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jvm::read_class_file;
+    use crate::jvm::JVMParser;
+    use crate::program::Program;
+    use std::env;
+    use std::path::Path;
 
     #[test]
     fn it_works() {
-        let x = 0;
-        assert_eq!(x, 0)
+        let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&env_var).join("support/NakedMain.class");
+        let class_file_bytes = read_class_file(&path);
+        let result = JVMParser::parse(&class_file_bytes);
+        assert!(result.is_ok());
+        let class_file = result.unwrap();
+        let program = Program::new(&class_file);
+        let mut runtime = Runtime::new(program);
+        println!("{:?}", runtime.run());
     }
-
 }
