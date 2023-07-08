@@ -785,10 +785,12 @@ mod tests {
                     class_index: 2,
                     name_and_type_index: 3,
                 },
-                CPInfo::ConstantClass { name_index: 4 },
-                CPInfo::ConstantInterfaceMethodRef {
-                    class_index: 5,
-                    name_and_type_index: 6,
+                CPInfo::ConstantClass {
+                    name_index: 4,
+                },
+                CPInfo::ConstantNameAndType {
+                    name_index: 5,
+                    descriptor_index: 6,
                 },
                 CPInfo::ConstantUtf8 {
                     bytes: "java/lang/Object".to_string(),
@@ -803,10 +805,12 @@ mod tests {
                     class_index: 8,
                     name_and_type_index: 9,
                 },
-                CPInfo::ConstantClass { name_index: 10 },
-                CPInfo::ConstantInterfaceMethodRef {
-                    class_index: 11,
-                    name_and_type_index: 12,
+                CPInfo::ConstantClass {
+                    name_index: 10,
+                },
+                CPInfo::ConstantNameAndType {
+                    name_index: 11,
+                    descriptor_index: 12,
                 },
                 CPInfo::ConstantUtf8 {
                     bytes: "SingleFuncCall".to_string(),
@@ -821,10 +825,12 @@ mod tests {
                     class_index: 14,
                     name_and_type_index: 15,
                 },
-                CPInfo::ConstantClass { name_index: 16 },
-                CPInfo::ConstantInterfaceMethodRef {
-                    class_index: 17,
-                    name_and_type_index: 18,
+                CPInfo::ConstantClass {
+                    name_index: 16,
+                },
+                CPInfo::ConstantNameAndType {
+                    name_index: 17,
+                    descriptor_index: 18,
                 },
                 CPInfo::ConstantUtf8 {
                     bytes: "java/lang/System".to_string(),
@@ -839,10 +845,12 @@ mod tests {
                     class_index: 20,
                     name_and_type_index: 21,
                 },
-                CPInfo::ConstantClass { name_index: 22 },
-                CPInfo::ConstantInterfaceMethodRef {
-                    class_index: 23,
-                    name_and_type_index: 24,
+                CPInfo::ConstantClass {
+                    name_index: 22,
+                },
+                CPInfo::ConstantNameAndType {
+                    name_index: 23,
+                    descriptor_index: 24,
                 },
                 CPInfo::ConstantUtf8 {
                     bytes: "java/io/PrintStream".to_string(),
@@ -859,7 +867,7 @@ mod tests {
                 CPInfo::ConstantUtf8 {
                     bytes: "LineNumberTable".to_string(),
                 },
-                CPInfo::ConstantUtf8 {
+               CPInfo::ConstantUtf8 {
                     bytes: "main".to_string(),
                 },
                 CPInfo::ConstantUtf8 {
@@ -870,7 +878,7 @@ mod tests {
                 },
                 CPInfo::ConstantUtf8 {
                     bytes: "SingleFuncCall.java".to_string(),
-                },
+                }
             ],
             access_flags: 33,
             this_class: 8,

@@ -472,3 +472,15 @@ impl Runtime {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let x = 0;
+        assert_eq!(x, 0)
+    }
+
+}
