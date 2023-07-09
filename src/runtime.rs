@@ -116,7 +116,7 @@ impl Value {
     fn compare<T: PartialOrd>(lhs: T, rhs: T) -> i32 {
         if lhs < rhs {
             -1
-        } else if rhs > lhs {
+        } else if lhs > rhs {
             1
         } else {
             0
@@ -378,11 +378,8 @@ impl Runtime {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    match (lhs, rhs) {
-                        (Some(a), Some(b)) => {
-                            self.push(Value::Int(Value::cmp(&a, &b)))
-                        }
-                        _ => (),
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        self.push(Value::Int(Value::cmp(&a, &b)))
                     }
                 }
                 // Control flow operations.
@@ -392,18 +389,13 @@ impl Runtime {
                         _ => panic!("expected value to be integer"),
                     };
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
                     match value == 0 {
-                        true => self.jump(relative_offset as usize),
+                        true => self.jump(relative_offset),
                         _ => (),
                     }
                 }
@@ -413,283 +405,200 @@ impl Runtime {
                         _ => panic!("expected value to be integer"),
                     };
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
                     match value != 0 {
-                        true => self.jump(relative_offset as usize),
+                        true => self.jump(relative_offset),
                         _ => (),
                     }
                 }
                 OPCode::IfLt => {
-                    let value = match self.pop() {
-                        Some(Value::Int(val)) => val,
-                        _ => panic!("expected value to be integer"),
-                    };
+                    let Some(Value::Int(value)) = self.pop() else { panic!("expected value to be integer") };
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
-                    match value < 0 {
-                        true => self.jump(relative_offset as usize),
-                        _ => (),
+                    if value < 0 {
+                        self.jump(relative_offset);
                     }
                 }
                 OPCode::IfGt => {
-                    let value = match self.pop() {
-                        Some(Value::Int(val)) => val,
-                        _ => panic!("expected value to be integer"),
+                    let Some(Value::Int(value)) = self.pop() else {
+                        panic!("expected value to be integer");
                     };
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
-                    match value > 0 {
-                        true => self.jump(relative_offset as usize),
-                        _ => (),
+                    if value > 0 {
+                        self.jump(relative_offset);
                     }
                 }
                 OPCode::IfLe => {
-                    let value = match self.pop() {
-                        Some(Value::Int(val)) => val,
-                        _ => panic!("expected value to be integer"),
+                    let Some(Value::Int(value)) = self.pop() else {
+                        panic!("expected value to be integer");
                     };
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
-                    match value <= 0 {
-                        true => self.jump(relative_offset as usize),
-                        _ => (),
+                    if value <= 0 {
+                        self.jump(relative_offset);
                     }
                 }
                 OPCode::IfGe => {
-                    let value = match self.pop() {
-                        Some(Value::Int(val)) => val,
-                        _ => panic!("expected value to be integer"),
+                    let Some(Value::Int(value)) = self.pop() else {
+                        panic!("expected value to be integer");
                     };
+
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
-                    match value >= 0 {
-                        true => self.jump(relative_offset as usize),
-                        _ => (),
+
+                    if value >= 0 {
+                        self.jump(relative_offset);
                     }
                 }
                 OPCode::IfICmpEq => {
                     let rhs = self.pop();
                     let lhs = self.pop();
+
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
 
-                    match (lhs, rhs) {
-                        (Some(a), Some(b)) => {
-                            if a == b {
-                                self.jump(relative_offset as usize)
-                            }
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        if a == b {
+                            self.jump(relative_offset);
                         }
-                        _ => (),
                     }
                 }
                 OPCode::IfICmpNe => {
                     let rhs = self.pop();
                     let lhs = self.pop();
+
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
 
-                    match (lhs, rhs) {
-                        (Some(a), Some(b)) => {
-                            if a != b {
-                                println!("Jumping !");
-                                self.jump(relative_offset as usize)
-                            }
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        if a != b {
+                            self.jump(relative_offset);
                         }
-                        _ => (),
                     }
                 }
                 OPCode::IfICmpLt => {
                     let rhs = self.pop();
                     let lhs = self.pop();
+
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
 
-                    match (lhs, rhs) {
-                        (Some(a), Some(b)) => {
-                            if a < b {
-                                self.jump(relative_offset as usize)
-                            }
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        if a < b {
+                            self.jump(relative_offset);
                         }
-                        _ => (),
                     }
                 }
                 OPCode::IfICmpGt => {
                     let rhs = self.pop();
                     let lhs = self.pop();
+
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
 
-                    match (lhs, rhs) {
-                        (Some(a), Some(b)) => {
-                            if a > b {
-                                self.jump(relative_offset as usize)
-                            }
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        if a > b {
+                            self.jump(relative_offset);
                         }
-                        _ => (),
                     }
                 }
                 OPCode::IfICmpLe => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    println!("RHS : {rhs:?}");
-                    println!("LHS : {lhs:?}");
+
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
 
-                    match (lhs, rhs) {
-                        (Some(a), Some(b)) => {
-                            if a <= b {
-                                self.jump(relative_offset as usize)
-                            }
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        if a <= b {
+                            self.jump(relative_offset);
                         }
-                        _ => (),
                     }
                 }
                 OPCode::IfICmpGe => {
                     let rhs = self.pop();
                     let lhs = self.pop();
+
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
 
-                    match (lhs, rhs) {
-                        (Some(a), Some(b)) => {
-                            if a >= b {
-                                self.jump(relative_offset as usize)
-                            }
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        if a >= b {
+                            self.jump(relative_offset);
                         }
-                        _ => (),
                     }
                 }
                 // Goto
                 OPCode::Goto => {
                     let relative_offset = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(v) => v - 3,
-                            _ => panic!(
-                                "Expected parameter to be of type Value::Int"
-                            ),
-                        },
+                        Some(params) => Self::get_relative_offset(params),
                         None => panic!(
                             "Expected instruction to have parameters got None"
                         ),
                     };
-                    self.jump(relative_offset as usize)
+
+                    self.jump(relative_offset);
                 }
                 // Return (void)
                 OPCode::Return => {
-                    let _ = self.frames.pop();
+                    self.frames.pop();
                 }
                 // Return with value.
                 OPCode::IReturn
                 | OPCode::LReturn
                 | OPCode::FReturn
-                | OPCode::DReturn => match self.frames.pop() {
-                    Some(mut frame) => {
+                | OPCode::DReturn => {
+                    if let Some(mut frame) = self.frames.pop() {
                         let value = frame.stack.pop().unwrap();
                         self.return_values.push(value);
-                        self.push(value)
+                        self.push(value);
                     }
-                    None => (),
-                },
+                }
                 // Void return
                 OPCode::Return => {
                     self.frames.pop();
@@ -714,6 +623,14 @@ impl Runtime {
         let bc = code[frame.instruction_index()];
         frame.inc_instruction_index();
         bc
+    }
+
+    /// Returns the relative offset from the mnemonics parameters list.
+    fn get_relative_offset(params: &[Value]) -> usize {
+        match params.get(0) {
+            Some(Value::Int(v)) => (v - 3) as usize,
+            _ => panic!("Expected parameter to be of type Value::Int"),
+        }
     }
 
     /// Returns the next instruction to execute.
@@ -769,10 +686,9 @@ impl Runtime {
                         let hi = self.next(&mut frame);
                         let method_ref_index =
                             Self::encode_arg(lo, hi) as usize;
-                        println!("Method Ref Index: {method_ref_index}");
                         let method_name_index =
                             self.program.find_method(method_ref_index);
-                        Some(vec![Value::Int(method_name_index as i32)])
+                        Some(vec![Value::Int(method_name_index)])
                     }
                     _ => None,
                 };
