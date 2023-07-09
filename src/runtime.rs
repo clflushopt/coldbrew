@@ -27,8 +27,8 @@ impl fmt::Display for RuntimeError {
 }
 
 /// JVM value types.
-#[derive(Debug, Copy, Clone)]
-enum Value {
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+pub enum Value {
     Int(i32),
     Long(i64),
     Float(f32),
@@ -134,7 +134,7 @@ pub struct Instruction {
 
 /// Program counter for the runtime points to the current instruction
 /// and method we're executing.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 struct ProgramCounter {
     instruction_index: usize,
     method_index: usize,
@@ -192,6 +192,8 @@ pub struct Runtime {
     // traces: Vec<Trace>,
     program: Program,
     frames: Vec<Frame>,
+    // used to store return values
+    return_values: Vec<Value>,
 }
 
 impl Runtime {
@@ -211,6 +213,7 @@ impl Runtime {
         Self {
             program: program,
             frames: vec![initial_frame],
+            return_values: vec![],
         }
     }
 
@@ -223,11 +226,18 @@ impl Runtime {
         Ok(())
     }
 
+    /// Returns the top value in the return values stack.
+    /// Used for testing only
+    pub fn top_return_value(&self) -> Option<Value> {
+        self.return_values.last().copied()
+    }
+
     /// Push a JVM value into the stack
     fn push(&mut self, value: Value) {
         if let Some(frame) = self.frames.last_mut() {
             frame.stack.push(value);
         }
+        println!("Found no frame ")
     }
 
     /// Pop a JVM value from the stack.
@@ -519,7 +529,7 @@ impl Runtime {
 
                     match (lhs, rhs) {
                         (Some(a), Some(b)) => {
-                            if Value::cmp(&a, &b) == 0 {
+                            if a == b {
                                 self.jump(relative_offset as usize)
                             }
                         }
@@ -543,7 +553,8 @@ impl Runtime {
 
                     match (lhs, rhs) {
                         (Some(a), Some(b)) => {
-                            if Value::cmp(&a, &b) != 0 {
+                            if a != b {
+                                println!("Jumping !");
                                 self.jump(relative_offset as usize)
                             }
                         }
@@ -567,7 +578,7 @@ impl Runtime {
 
                     match (lhs, rhs) {
                         (Some(a), Some(b)) => {
-                            if Value::cmp(&a, &b) == -1 {
+                            if a < b {
                                 self.jump(relative_offset as usize)
                             }
                         }
@@ -591,7 +602,7 @@ impl Runtime {
 
                     match (lhs, rhs) {
                         (Some(a), Some(b)) => {
-                            if Value::cmp(&a, &b) == 1 {
+                            if a > b {
                                 self.jump(relative_offset as usize)
                             }
                         }
@@ -601,6 +612,8 @@ impl Runtime {
                 OPCode::IfICmpLe => {
                     let rhs = self.pop();
                     let lhs = self.pop();
+                    println!("RHS : {rhs:?}");
+                    println!("LHS : {lhs:?}");
                     let relative_offset = match &inst.params {
                         Some(params) => match params[0] {
                             Value::Int(v) => v - 3,
@@ -615,9 +628,7 @@ impl Runtime {
 
                     match (lhs, rhs) {
                         (Some(a), Some(b)) => {
-                            if Value::cmp(&a, &b) == -1
-                                || Value::cmp(&a, &b) == 0
-                            {
+                            if a <= b {
                                 self.jump(relative_offset as usize)
                             }
                         }
@@ -641,20 +652,44 @@ impl Runtime {
 
                     match (lhs, rhs) {
                         (Some(a), Some(b)) => {
-                            if Value::cmp(&a, &b) == 1
-                                || Value::cmp(&a, &b) == 0
-                            {
+                            if a >= b {
                                 self.jump(relative_offset as usize)
                             }
                         }
                         _ => (),
                     }
                 }
+                // Goto
+                OPCode::Goto => {
+                    let relative_offset = match &inst.params {
+                        Some(params) => match params[0] {
+                            Value::Int(v) => v - 3,
+                            _ => panic!(
+                                "Expected parameter to be of type Value::Int"
+                            ),
+                        },
+                        None => panic!(
+                            "Expected instruction to have parameters got None"
+                        ),
+                    };
+                    self.jump(relative_offset as usize)
+                }
+                // Return (void)
+                OPCode::Return => {
+                    let _ = self.frames.pop();
+                }
                 // Return with value.
                 OPCode::IReturn
                 | OPCode::LReturn
                 | OPCode::FReturn
-                | OPCode::DReturn => todo!(),
+                | OPCode::DReturn => match self.frames.pop() {
+                    Some(mut frame) => {
+                        let value = frame.stack.pop().unwrap();
+                        self.return_values.push(value);
+                        self.push(value)
+                    }
+                    None => (),
+                },
                 // Void return
                 OPCode::Return => {
                     self.frames.pop();
@@ -741,6 +776,7 @@ impl Runtime {
                     }
                     _ => None,
                 };
+                println!("Frame : {frame:?}");
                 self.frames.push(frame);
 
                 println!("Mnemonic : {mnemonic}");
@@ -762,15 +798,27 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn it_works() {
-        let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let path = Path::new(&env_var).join("support/NakedMain.class");
-        let class_file_bytes = read_class_file(&path);
-        let result = JVMParser::parse(&class_file_bytes);
-        assert!(result.is_ok());
-        let class_file = result.unwrap();
-        let program = Program::new(&class_file);
-        let mut runtime = Runtime::new(program);
-        println!("{:?}", runtime.run());
+    fn compare_operations_works() {
+        let test_files = vec![
+            "support/CompareEq.class",
+            "support/CompareNe.class",
+            "support/CompareGt.class",
+            "support/CompareLt.class",
+            "support/CompareGe.class",
+            "support/CompareLe.class",
+        ];
+        for test_file in test_files {
+            println!("Testing : {test_file}");
+            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+            let path = Path::new(&env_var).join(test_file);
+            let class_file_bytes = read_class_file(&path);
+            let result = JVMParser::parse(&class_file_bytes);
+            assert!(result.is_ok());
+            let class_file = result.unwrap();
+            let program = Program::new(&class_file);
+            let mut runtime = Runtime::new(program);
+            runtime.run();
+            assert_eq!(runtime.top_return_value(), Some(Value::Int(1)));
+        }
     }
 }
