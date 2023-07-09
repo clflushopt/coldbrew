@@ -260,6 +260,13 @@ impl Runtime {
         }
     }
 
+    /// Jump with a relative offset.
+    fn jump(&mut self, offset: usize) {
+        if let Some(frame) = self.frames.last_mut() {
+            frame.pc.instruction_index += offset
+        }
+    }
+
     /// Evaluate a given instruction.
     fn eval(&mut self, inst: &Instruction) {
         if let Some(frame) = self.frames.last_mut() {
@@ -365,6 +372,133 @@ impl Runtime {
                         (Some(a), Some(b)) => {
                             self.push(Value::Int(Value::cmp(&a, &b)))
                         }
+                        _ => (),
+                    }
+                }
+                // Control flow operations.
+                OPCode::IfEq => {
+                    let value = match self.pop() {
+                        Some(Value::Int(val)) => val,
+                        _ => panic!("expected value to be integer"),
+                    };
+                    let relative_offset = match &inst.params {
+                        Some(params) => match params[0] {
+                            Value::Int(v) => v - 3,
+                            _ => panic!(
+                                "Expected parameter to be of type Value::Int"
+                            ),
+                        },
+                        None => panic!(
+                            "Expected instruction to have parameters got None"
+                        ),
+                    };
+                    match value == 0 {
+                        true => self.jump(relative_offset as usize),
+                        _ => (),
+                    }
+                }
+                OPCode::IfNe => {
+                    let value = match self.pop() {
+                        Some(Value::Int(val)) => val,
+                        _ => panic!("expected value to be integer"),
+                    };
+                    let relative_offset = match &inst.params {
+                        Some(params) => match params[0] {
+                            Value::Int(v) => v - 3,
+                            _ => panic!(
+                                "Expected parameter to be of type Value::Int"
+                            ),
+                        },
+                        None => panic!(
+                            "Expected instruction to have parameters got None"
+                        ),
+                    };
+                    match value != 0 {
+                        true => self.jump(relative_offset as usize),
+                        _ => (),
+                    }
+                }
+                OPCode::IfLt => {
+                    let value = match self.pop() {
+                        Some(Value::Int(val)) => val,
+                        _ => panic!("expected value to be integer"),
+                    };
+                    let relative_offset = match &inst.params {
+                        Some(params) => match params[0] {
+                            Value::Int(v) => v - 3,
+                            _ => panic!(
+                                "Expected parameter to be of type Value::Int"
+                            ),
+                        },
+                        None => panic!(
+                            "Expected instruction to have parameters got None"
+                        ),
+                    };
+                    match value < 0 {
+                        true => self.jump(relative_offset as usize),
+                        _ => (),
+                    }
+                }
+                OPCode::IfGt => {
+                    let value = match self.pop() {
+                        Some(Value::Int(val)) => val,
+                        _ => panic!("expected value to be integer"),
+                    };
+                    let relative_offset = match &inst.params {
+                        Some(params) => match params[0] {
+                            Value::Int(v) => v - 3,
+                            _ => panic!(
+                                "Expected parameter to be of type Value::Int"
+                            ),
+                        },
+                        None => panic!(
+                            "Expected instruction to have parameters got None"
+                        ),
+                    };
+                    match value > 0 {
+                        true => self.jump(relative_offset as usize),
+                        _ => (),
+                    }
+                }
+                OPCode::IfLe => {
+                    let value = match self.pop() {
+                        Some(Value::Int(val)) => val,
+                        _ => panic!("expected value to be integer"),
+                    };
+                    let relative_offset = match &inst.params {
+                        Some(params) => match params[0] {
+                            Value::Int(v) => v - 3,
+                            _ => panic!(
+                                "Expected parameter to be of type Value::Int"
+                            ),
+                        },
+                        None => panic!(
+                            "Expected instruction to have parameters got None"
+                        ),
+                    };
+                    match value <= 0 {
+                        true => self.jump(relative_offset as usize),
+                        _ => (),
+                    }
+                }
+                OPCode::IfGe => {
+                    let value = match self.pop() {
+                        Some(Value::Int(val)) => val,
+                        _ => panic!("expected value to be integer"),
+                    };
+                    let relative_offset = match &inst.params {
+                        Some(params) => match params[0] {
+                            Value::Int(v) => v - 3,
+                            _ => panic!(
+                                "Expected parameter to be of type Value::Int"
+                            ),
+                        },
+                        None => panic!(
+                            "Expected instruction to have parameters got None"
+                        ),
+                    };
+                    match value >= 0 {
+                        true => self.jump(relative_offset as usize),
                         _ => (),
                     }
                 }
