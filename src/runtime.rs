@@ -263,9 +263,8 @@ impl Runtime {
     /// Load a local value and push it to the stack.
     fn load(&mut self, index: usize) {
         if let Some(frame) = self.frames.last_mut() {
-            match frame.locals.get(&index) {
-                Some(value) => frame.stack.push(*value),
-                None => (),
+            if let Some(value) = frame.locals.get(&index) {
+                frame.stack.push(*value);
             }
         }
     }
@@ -273,7 +272,7 @@ impl Runtime {
     /// Jump with a relative offset.
     fn jump(&mut self, offset: usize) {
         if let Some(frame) = self.frames.last_mut() {
-            frame.pc.instruction_index += offset
+            frame.pc.instruction_index += offset;
         }
     }
 
@@ -312,8 +311,8 @@ impl Runtime {
                 | OPCode::LLoad
                 | OPCode::FLoad
                 | OPCode::DLoad => match &inst.params {
-                    Some(params) => match params[0] {
-                        Value::Int(v) => self.load(v as usize),
+                    Some(params) => match params.get(0) {
+                        Some(Value::Int(v)) => self.load(*v as usize),
                         _ => panic!(
                             "Expected parameter to be of type Value::Int"
                         ),
@@ -343,8 +342,8 @@ impl Runtime {
                 | OPCode::LStore
                 | OPCode::FStore
                 | OPCode::DStore => match &inst.params {
-                    Some(params) => match params[0] {
-                        Value::Int(v) => self.store(v as usize),
+                    Some(params) => match params.get(0) {
+                        Some(Value::Int(v)) => self.store(*v as usize),
                         _ => panic!(
                             "Expected parameter to be of type Value::Int"
                         ),
@@ -379,50 +378,52 @@ impl Runtime {
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::Int(Value::cmp(&a, &b)))
+                        self.push(Value::Int(Value::cmp(&a, &b)));
                     }
                 }
                 // Control flow operations.
                 OPCode::IfEq => {
-                    let value = match self.pop() {
-                        Some(Value::Int(val)) => val,
-                        _ => panic!("expected value to be integer"),
-                    };
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
-                    match value == 0 {
-                        true => self.jump(relative_offset),
-                        _ => (),
+                    let Some(Value::Int(value)) = self.pop() else { panic!("expected value to be integer") };
+
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
+                    if value == 0 {
+                        self.jump(relative_offset);
                     }
                 }
                 OPCode::IfNe => {
-                    let value = match self.pop() {
-                        Some(Value::Int(val)) => val,
-                        _ => panic!("expected value to be integer"),
-                    };
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
-                    match value != 0 {
-                        true => self.jump(relative_offset),
-                        _ => (),
+                    let Some(Value::Int(value)) = self.pop() else { panic!("expected value to be integer") };
+
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
+                    if value != 0 {
+                        self.jump(relative_offset);
                     }
                 }
                 OPCode::IfLt => {
                     let Some(Value::Int(value)) = self.pop() else { panic!("expected value to be integer") };
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
+
                     if value < 0 {
                         self.jump(relative_offset);
                     }
@@ -431,12 +432,16 @@ impl Runtime {
                     let Some(Value::Int(value)) = self.pop() else {
                         panic!("expected value to be integer");
                     };
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
+
                     if value > 0 {
                         self.jump(relative_offset);
                     }
@@ -445,12 +450,16 @@ impl Runtime {
                     let Some(Value::Int(value)) = self.pop() else {
                         panic!("expected value to be integer");
                     };
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
+
                     if value <= 0 {
                         self.jump(relative_offset);
                     }
@@ -460,12 +469,14 @@ impl Runtime {
                         panic!("expected value to be integer");
                     };
 
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
 
                     if value >= 0 {
                         self.jump(relative_offset);
@@ -475,12 +486,14 @@ impl Runtime {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a == b {
@@ -492,12 +505,14 @@ impl Runtime {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a != b {
@@ -509,12 +524,14 @@ impl Runtime {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a < b {
@@ -526,12 +543,14 @@ impl Runtime {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a > b {
@@ -543,12 +562,14 @@ impl Runtime {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a <= b {
@@ -560,12 +581,14 @@ impl Runtime {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a >= b {
@@ -575,18 +598,16 @@ impl Runtime {
                 }
                 // Goto
                 OPCode::Goto => {
-                    let relative_offset = match &inst.params {
-                        Some(params) => Self::get_relative_offset(params),
-                        None => panic!(
-                            "Expected instruction to have parameters got None"
-                        ),
-                    };
+                    let relative_offset = inst.params.as_ref().map_or_else(
+                        || {
+                            panic!(
+                             "Expected instruction to have parameters got None"
+                         )
+                        },
+                        |params| Self::get_relative_offset(params),
+                    );
 
                     self.jump(relative_offset);
-                }
-                // Return (void)
-                OPCode::Return => {
-                    self.frames.pop();
                 }
                 // Return with value.
                 OPCode::IReturn
