@@ -48,54 +48,46 @@ impl Value {
     /// We could use operator overloading for all the arithmetic operators
     /// but to keep things simple we chose to implement them as functions.
 
-    /// Computes the sum of two values of the same type}
+    /// Computes the sum of two values of the same type.
     pub fn add(lhs: &Value, rhs: &Value) -> Value {
         match (lhs, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs + rhs),
-            (Value::Long(lhs), Value::Long(rhs)) => Value::Long(lhs + rhs),
-            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs + rhs),
-            (Value::Double(lhs), Value::Double(rhs)) => {
-                Value::Double(lhs + rhs)
-            }
+            (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs + rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs + rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs + rhs),
+            (Self::Double(lhs), Self::Double(rhs)) => Self::Double(lhs + rhs),
             _ => panic!("Expected value type"),
         }
     }
 
-    /// Computes the difference of two values of the same type}
+    /// Computes the difference of two values of the same type.
     pub fn sub(lhs: &Value, rhs: &Value) -> Value {
         match (lhs, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs - rhs),
-            (Value::Long(lhs), Value::Long(rhs)) => Value::Long(lhs - rhs),
-            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs - rhs),
-            (Value::Double(lhs), Value::Double(rhs)) => {
-                Value::Double(lhs - rhs)
-            }
+            (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs - rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs - rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs - rhs),
+            (Self::Double(lhs), Self::Double(rhs)) => Self::Double(lhs - rhs),
             _ => panic!("Expected value type"),
         }
     }
 
-    /// Computes the product of two values of the same type}
+    /// Computes the product of two values of the same type.
     pub fn mul(lhs: &Value, rhs: &Value) -> Value {
         match (lhs, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs * rhs),
-            (Value::Long(lhs), Value::Long(rhs)) => Value::Long(lhs * rhs),
-            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs * rhs),
-            (Value::Double(lhs), Value::Double(rhs)) => {
-                Value::Double(lhs * rhs)
-            }
+            (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs * rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs * rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs * rhs),
+            (Self::Double(lhs), Self::Double(rhs)) => Self::Double(lhs * rhs),
             _ => panic!("Expected value type"),
         }
     }
 
-    /// Computes the division of two values of the same type}
+    /// Computes the division of two values of the same type.
     pub fn div(lhs: &Value, rhs: &Value) -> Value {
         match (lhs, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs / rhs),
-            (Value::Long(lhs), Value::Long(rhs)) => Value::Long(lhs / rhs),
-            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs / rhs),
-            (Value::Double(lhs), Value::Double(rhs)) => {
-                Value::Double(lhs / rhs)
-            }
+            (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs / rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs / rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs / rhs),
+            (Self::Double(lhs), Self::Double(rhs)) => Self::Double(lhs / rhs),
             _ => panic!("Expected value type"),
         }
     }
@@ -104,10 +96,10 @@ impl Value {
     /// -1 if rhs is less than lhs and 0 otherwise.
     pub fn cmp(lhs: &Value, rhs: &Value) -> i32 {
         match (lhs, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Self::compare(lhs, rhs),
-            (Value::Long(lhs), Value::Long(rhs)) => Self::compare(lhs, rhs),
-            (Value::Float(lhs), Value::Float(rhs)) => Self::compare(lhs, rhs),
-            (Value::Double(lhs), Value::Double(rhs)) => Self::compare(lhs, rhs),
+            (Self::Int(lhs), Self::Int(rhs)) => Self::compare(lhs, rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => Self::compare(lhs, rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => Self::compare(lhs, rhs),
+            (Self::Double(lhs), Self::Double(rhs)) => Self::compare(lhs, rhs),
             _ => panic!("Expected value type"),
         }
     }
@@ -237,7 +229,6 @@ impl Runtime {
         if let Some(frame) = self.frames.last_mut() {
             frame.stack.push(value);
         }
-        println!("Found no frame ")
     }
 
     /// Pop a JVM value from the stack.
@@ -251,11 +242,8 @@ impl Runtime {
     /// Store the topmost value in the stack as local value.
     fn store(&mut self, index: usize) {
         if let Some(value) = self.pop() {
-            match self.frames.last_mut() {
-                Some(frame) => {
-                    frame.locals.insert(index, value);
-                }
-                None => (),
+            if let Some(frame) = self.frames.last_mut() {
+                frame.locals.insert(index, value);
             }
         }
     }
@@ -310,17 +298,19 @@ impl Runtime {
                 OPCode::ILoad
                 | OPCode::LLoad
                 | OPCode::FLoad
-                | OPCode::DLoad => match &inst.params {
-                    Some(params) => match params.get(0) {
+                | OPCode::DLoad => inst.params.as_ref().map_or_else(
+                    || {
+                        panic!(
+                            "Expected instruction to have parameters got None"
+                        )
+                    },
+                    |params| match params.get(0) {
                         Some(Value::Int(v)) => self.load(*v as usize),
                         _ => panic!(
                             "Expected parameter to be of type Value::Int"
                         ),
                     },
-                    None => panic!(
-                        "Expected instruction to have parameters got None"
-                    ),
-                },
+                ),
                 OPCode::ILoad0
                 | OPCode::LLoad0
                 | OPCode::FLoad0
@@ -341,17 +331,19 @@ impl Runtime {
                 OPCode::IStore
                 | OPCode::LStore
                 | OPCode::FStore
-                | OPCode::DStore => match &inst.params {
-                    Some(params) => match params.get(0) {
+                | OPCode::DStore => inst.params.as_ref().map_or_else(
+                    || {
+                        panic!(
+                            "Expected instruction to have parameters got None"
+                        )
+                    },
+                    |params| match params.get(0) {
                         Some(Value::Int(v)) => self.store(*v as usize),
                         _ => panic!(
                             "Expected parameter to be of type Value::Int"
                         ),
                     },
-                    None => panic!(
-                        "Expected instruction to have parameters got None"
-                    ),
-                },
+                ),
                 OPCode::IStore0
                 | OPCode::LStore0
                 | OPCode::FStore0
@@ -625,7 +617,7 @@ impl Runtime {
                     self.frames.pop();
                 }
                 OPCode::NOP => (),
-                _ => (),
+                _ => todo!(),
             }
         }
         println!("Frames : {:?}", self.frames);
