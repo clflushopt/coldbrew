@@ -161,11 +161,11 @@ impl Program {
     // main.
     pub fn entry_point(&self) -> usize {
         for (index, method) in &self.methods {
-            match self.constant_pool.get(*index as usize) {
+            match self.constant_pool.get(*index) {
                 Some(constant) => {
                     if let CPInfo::ConstantUtf8 { bytes } = constant {
                         if bytes == "main" {
-                            return *index as usize;
+                            return *index;
                         }
                     }
                 }

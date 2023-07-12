@@ -49,7 +49,7 @@ impl Value {
     /// but to keep things simple we chose to implement them as functions.
 
     /// Computes the sum of two values of the same type.
-    pub fn add(lhs: &Value, rhs: &Value) -> Value {
+    pub fn add(lhs: &Self, rhs: &Self) -> Self {
         match (lhs, rhs) {
             (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs + rhs),
             (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs + rhs),
@@ -60,7 +60,7 @@ impl Value {
     }
 
     /// Computes the difference of two values of the same type.
-    pub fn sub(lhs: &Value, rhs: &Value) -> Value {
+    pub fn sub(lhs: &Self, rhs: &Self) -> Self {
         match (lhs, rhs) {
             (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs - rhs),
             (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs - rhs),
@@ -71,7 +71,7 @@ impl Value {
     }
 
     /// Computes the product of two values of the same type.
-    pub fn mul(lhs: &Value, rhs: &Value) -> Value {
+    pub fn mul(lhs: &Self, rhs: &Self) -> Self {
         match (lhs, rhs) {
             (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs * rhs),
             (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs * rhs),
@@ -82,7 +82,7 @@ impl Value {
     }
 
     /// Computes the division of two values of the same type.
-    pub fn div(lhs: &Value, rhs: &Value) -> Value {
+    pub fn div(lhs: &Self, rhs: &Self) -> Self {
         match (lhs, rhs) {
             (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs / rhs),
             (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs / rhs),
@@ -94,24 +94,22 @@ impl Value {
 
     /// Compares two values of the same type, returns 1 if rhs is greater than lhs
     /// -1 if rhs is less than lhs and 0 otherwise.
-    pub fn cmp(lhs: &Value, rhs: &Value) -> i32 {
+    pub fn compare(lhs: &Self, rhs: &Self) -> i32 {
         match (lhs, rhs) {
-            (Self::Int(lhs), Self::Int(rhs)) => Self::compare(lhs, rhs),
-            (Self::Long(lhs), Self::Long(rhs)) => Self::compare(lhs, rhs),
-            (Self::Float(lhs), Self::Float(rhs)) => Self::compare(lhs, rhs),
-            (Self::Double(lhs), Self::Double(rhs)) => Self::compare(lhs, rhs),
+            (Self::Int(lhs), Self::Int(rhs)) => Self::cmp(lhs, rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => Self::cmp(lhs, rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => Self::cmp(lhs, rhs),
+            (Self::Double(lhs), Self::Double(rhs)) => Self::cmp(lhs, rhs),
             _ => panic!("Expected value type"),
         }
     }
 
     /// Comparison function for primitive types that implement `PartialOrd`.
-    fn compare<T: PartialOrd>(lhs: T, rhs: T) -> i32 {
+    fn cmp<T: PartialOrd>(lhs: &T, rhs: &T) -> i32 {
         if lhs < rhs {
             -1
-        } else if lhs > rhs {
-            1
         } else {
-            0
+            i32::from(lhs > rhs)
         }
     }
 }
@@ -370,7 +368,7 @@ impl Runtime {
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::Int(Value::cmp(&a, &b)));
+                        self.push(Value::Int(Value::compare(&a, &b)));
                     }
                 }
                 // Control flow operations.
@@ -617,7 +615,7 @@ impl Runtime {
                     self.frames.pop();
                 }
                 OPCode::NOP => (),
-                _ => todo!(),
+                _ => (),
             }
         }
         println!("Frames : {:?}", self.frames);
