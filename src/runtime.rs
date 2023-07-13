@@ -358,6 +358,45 @@ impl Runtime {
                 | OPCode::LStore3
                 | OPCode::FStore3
                 | OPCode::DStore3 => self.store(3),
+                // Arithmetic operations.
+                OPCode::IAdd | OPCode::LAdd | OPCode::FAdd | OPCode::DAdd => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        self.push(Value::add(&a, &b))
+                    }
+                }
+                OPCode::ISub | OPCode::LSub | OPCode::FSub | OPCode::DSub => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        self.push(Value::sub(&a, &b))
+                    }
+                }
+                OPCode::IMul | OPCode::LMul | OPCode::FMul | OPCode::DMul => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        self.push(Value::mul(&a, &b))
+                    }
+                }
+                OPCode::IDiv | OPCode::LDiv | OPCode::FDiv | OPCode::DDiv => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        self.push(Value::div(&a, &b))
+                    }
+                }
+                OPCode::IInc => {
+                    let index = match &inst.params[0] {
+                        Some(Value::Int(ii)) => ii as usize,
+                        _ => panic!("Expected at least one parameters"),
+                    };
+                }
                 // Comparison operations.
                 OPCode::LCmp
                 | OPCode::FCmpL
