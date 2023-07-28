@@ -391,11 +391,27 @@ impl Runtime {
                         self.push(Value::div(&a, &b))
                     }
                 }
+                OPCode::IRem | OPCode::LRem | OPCode::FRem | OPCode::DRem => {
+                    todo!()
+                }
                 OPCode::IInc => {
-                    let index = match &inst.params[0] {
-                        Some(Value::Int(ii)) => ii as usize,
-                        _ => panic!("Expected at least one parameters"),
+                    let (index, constant) = if let Some(params) = &inst.params {
+                        match (params[0], params[1]) {
+                            (Value::Int(ii), Value::Int(cnst)) => {
+                                (ii as usize, cnst)
+                            }
+                            _ => panic!("Expected at least one parameter"),
+                        }
+                    } else {
+                        panic!("Instruction IInc is missing parameters")
                     };
+                    self.frames[0]
+                        .locals
+                        .entry(index)
+                        .and_modify(|val| {
+                            *val = Value::add(val, &Value::Int(constant))
+                        })
+                        .or_insert(Value::Int(constant));
                 }
                 // Comparison operations.
                 OPCode::LCmp
