@@ -92,6 +92,17 @@ impl Value {
         }
     }
 
+    /// Computes the remainder of the division of two values of the same type.
+    pub fn rem(lhs: &Self, rhs: &Self) -> Self {
+        match (lhs, rhs) {
+            (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs % rhs),
+            (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs % rhs),
+            (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs % rhs),
+            (Self::Double(lhs), Self::Double(rhs)) => Self::Double(lhs % rhs),
+            _ => panic!("Expected value type"),
+        }
+    }
+
     /// Compares two values of the same type, returns 1 if rhs is greater than lhs
     /// -1 if rhs is less than lhs and 0 otherwise.
     pub fn compare(lhs: &Self, rhs: &Self) -> i32 {
@@ -392,7 +403,12 @@ impl Runtime {
                     }
                 }
                 OPCode::IRem | OPCode::LRem | OPCode::FRem | OPCode::DRem => {
-                    todo!()
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+
+                    if let (Some(a), Some(b)) = (lhs, rhs) {
+                        self.push(Value::rem(&a, &b))
+                    }
                 }
                 OPCode::IInc => {
                     let (index, constant) = if let Some(params) = &inst.params {
@@ -801,6 +817,26 @@ mod tests {
             let mut runtime = Runtime::new(program);
             runtime.run();
             assert_eq!(runtime.top_return_value(), Some(Value::Int(1)));
+        }
+    }
+
+    #[test]
+    fn remainder_operations_works() {
+        let test_files = vec![
+            "support/Rem.class",
+        ];
+        for test_file in test_files {
+            println!("Testing : {test_file}");
+            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+            let path = Path::new(&env_var).join(test_file);
+            let class_file_bytes = read_class_file(&path);
+            let result = JVMParser::parse(&class_file_bytes);
+            assert!(result.is_ok());
+            let class_file = result.unwrap();
+            let program = Program::new(&class_file);
+            let mut runtime = Runtime::new(program);
+            runtime.run();
+            assert_eq!(runtime.top_return_value(), Some(Value::Int(2)));
         }
     }
 }
