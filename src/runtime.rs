@@ -316,10 +316,7 @@ impl Runtime {
     fn eval(&mut self, inst: &Instruction) {
         if let Some(_frame) = self.frames.last_mut() {
             match inst.mnemonic {
-                OPCode::IconstM1 => {
-                    println!("Executing IconstM1");
-                    self.push(Value::Int(-1));
-                }
+                OPCode::IconstM1 => self.push(Value::Int(-1)),
                 OPCode::Iconst0 => self.push(Value::Int(0)),
                 OPCode::Iconst1 => self.push(Value::Int(1)),
                 OPCode::Iconst2 => self.push(Value::Int(2)),
