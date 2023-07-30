@@ -1,7 +1,7 @@
 //! JVM runtime module responsible for creating a new runtime
 //! environment and running programs.
 use crate::bytecode::OPCode;
-use crate::program::{BaseTypeKind, Program, Type};
+use crate::program::{BaseTypeKind, Program};
 
 use std::collections::HashMap;
 use std::fmt;
@@ -54,7 +54,7 @@ impl Value {
     pub fn to_long(&self) -> Value {
         match *self {
             Self::Int(val) => Value::Long(val as i64),
-            Self::Long(val) => Value::Long(val as i64),
+            Self::Long(val) => Value::Long(val),
             Self::Float(val) => Value::Long(val as i64),
             Self::Double(val) => Value::Long(val as i64),
         }
@@ -62,7 +62,7 @@ impl Value {
     /// Converts an existing value from it's base type to `BaseTypeKind::Int`.
     pub fn to_int(&self) -> Value {
         match *self {
-            Self::Int(val) => Value::Int(val as i32),
+            Self::Int(val) => Value::Int(val),
             Self::Long(val) => Value::Int(val as i32),
             Self::Float(val) => Value::Int(val as i32),
             Self::Double(val) => Value::Int(val as i32),
@@ -74,7 +74,7 @@ impl Value {
             Self::Int(val) => Value::Double(val as f64),
             Self::Long(val) => Value::Double(val as f64),
             Self::Float(val) => Value::Double(val as f64),
-            Self::Double(val) => Value::Double(val as f64),
+            Self::Double(val) => Value::Double(val),
         }
     }
     /// Converts an existing value from it's base type to `BaseTypeKind::Float`.
@@ -82,7 +82,7 @@ impl Value {
         match *self {
             Self::Int(val) => Value::Float(val as f32),
             Self::Long(val) => Value::Float(val as f32),
-            Self::Float(val) => Value::Float(val as f32),
+            Self::Float(val) => Value::Float(val),
             Self::Double(val) => Value::Float(val as f32),
         }
     }
@@ -246,12 +246,12 @@ impl Runtime {
             method_index: main,
         };
         let initial_frame = Frame {
-            pc: pc,
+            pc,
             stack: Vec::new(),
             locals: HashMap::new(),
         };
         Self {
-            program: program,
+            program,
             frames: vec![initial_frame],
             return_values: vec![],
         }
@@ -314,7 +314,7 @@ impl Runtime {
 
     /// Evaluate a given instruction.
     fn eval(&mut self, inst: &Instruction) {
-        if let Some(frame) = self.frames.last_mut() {
+        if let Some(_frame) = self.frames.last_mut() {
             match inst.mnemonic {
                 OPCode::IconstM1 => {
                     println!("Executing IconstM1");

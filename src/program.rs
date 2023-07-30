@@ -131,7 +131,7 @@ impl Program {
             // Get a copy of the constant pool.
             constant_pool: class_file.constant_pool(),
             // Get a copy of the program methods.
-            methods: methods,
+            methods,
         }
     }
 
@@ -160,7 +160,7 @@ impl Program {
     // Returns program entry point, in this case the index of the method
     // main.
     pub fn entry_point(&self) -> usize {
-        for (index, method) in &self.methods {
+        for (index, _method) in &self.methods {
             match self.constant_pool.get(*index) {
                 Some(constant) => {
                     if let CPInfo::ConstantUtf8 { bytes } = constant {
