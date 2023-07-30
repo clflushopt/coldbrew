@@ -35,6 +35,10 @@ pub enum Value {
     Double(f64),
 }
 
+/// Implementation of JVM value helper functions to get the type and operate
+/// on them.
+/// We could use operator overloading for all the arithmetic operators
+/// but to keep things simple we chose to implement them as functions.
 impl Value {
     /// Returns the type of the value.
     pub const fn t(&self) -> BaseTypeKind {
@@ -45,8 +49,43 @@ impl Value {
             Self::Double(_) => BaseTypeKind::Double,
         }
     }
-    /// We could use operator overloading for all the arithmetic operators
-    /// but to keep things simple we chose to implement them as functions.
+
+    /// Converts an existing value from it's base type to `BaseTypeKind::Long`.
+    pub fn to_long(&self) -> Value {
+        match *self {
+            Self::Int(val) => Value::Long(val as i64),
+            Self::Long(val) => Value::Long(val as i64),
+            Self::Float(val) => Value::Long(val as i64),
+            Self::Double(val) => Value::Long(val as i64),
+        }
+    }
+    /// Converts an existing value from it's base type to `BaseTypeKind::Int`.
+    pub fn to_int(&self) -> Value {
+        match *self {
+            Self::Int(val) => Value::Int(val as i32),
+            Self::Long(val) => Value::Int(val as i32),
+            Self::Float(val) => Value::Int(val as i32),
+            Self::Double(val) => Value::Int(val as i32),
+        }
+    }
+    /// Converts an existing value from it's base type to `BaseTypeKind::Double`.
+    pub fn to_double(&self) -> Value {
+        match *self {
+            Self::Int(val) => Value::Double(val as f64),
+            Self::Long(val) => Value::Double(val as f64),
+            Self::Float(val) => Value::Double(val as f64),
+            Self::Double(val) => Value::Double(val as f64),
+        }
+    }
+    /// Converts an existing value from it's base type to `BaseTypeKind::Float`.
+    pub fn to_float(&self) -> Value {
+        match *self {
+            Self::Int(val) => Value::Float(val as f32),
+            Self::Long(val) => Value::Float(val as f32),
+            Self::Float(val) => Value::Float(val as f32),
+            Self::Double(val) => Value::Float(val as f32),
+        }
+    }
 
     /// Computes the sum of two values of the same type.
     pub fn add(lhs: &Self, rhs: &Self) -> Self {
@@ -429,6 +468,23 @@ impl Runtime {
                         })
                         .or_insert(Value::Int(constant));
                 }
+                // Type conversion operations.
+                OPCode::L2I | OPCode::F2I | OPCode::D2I => {
+                    let val = self.pop();
+                    self.push(val.expect("expected value").to_int())
+                }
+                OPCode::I2F | OPCode::L2F | OPCode::D2F => {
+                    let val = self.pop();
+                    self.push(val.expect("expected value").to_float())
+                }
+                OPCode::I2D | OPCode::L2D | OPCode::F2D => {
+                    let val = self.pop();
+                    self.push(val.expect("expected value").to_double())
+                }
+                OPCode::I2L | OPCode::F2L | OPCode::D2L => {
+                    let val = self.pop();
+                    self.push(val.expect("expected value").to_long())
+                }
                 // Comparison operations.
                 OPCode::LCmp
                 | OPCode::FCmpL
@@ -685,7 +741,8 @@ impl Runtime {
                 OPCode::Return => {
                     self.frames.pop();
                 }
-                OPCode::NOP => (),
+                // TODO: Add InvokeVirtual/InvokeStatic
+                OPCode::NOP | OPCode::Dup => (),
                 _ => (),
             }
         }
@@ -772,6 +829,7 @@ impl Runtime {
                             self.program.find_method(method_ref_index);
                         Some(vec![Value::Int(method_name_index)])
                     }
+                    // TODO: add LDC2_W and LDC instructions
                     _ => None,
                 };
                 println!("Frame : {frame:?}");
@@ -822,9 +880,7 @@ mod tests {
 
     #[test]
     fn remainder_operations_works() {
-        let test_files = vec![
-            "support/Rem.class",
-        ];
+        let test_files = vec!["support/Rem.class"];
         for test_file in test_files {
             println!("Testing : {test_file}");
             let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
