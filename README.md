@@ -4,8 +4,8 @@
 supports mainly primitive numeric types (`int`, `long`, `float`, `double`) and
 serves as a demo project for how JIT compilers work in genenral.
 
-`coldbrew` is inspired by [TigerShrimp][^2] and [Higgs][^3]. I started the project
-as a Rust port of [TigerShrimp C++ implementation][^4] my goal was to understand
+`coldbrew` is inspired by TigerShrimp[^2] and Higgs[^3]. I started the project
+as a Rust port of TigerShrimp C++ implementation[^4] my goal was to understand
 how tracing JITs work and how they are architectured but then it quickly become
 obvious that porting C++ to Rust isn't feasible without introducing a few
 architectural changes to ensure program safety.
@@ -20,7 +20,7 @@ the same time everywhere at once.
 ## How it works
 
 `coldbrew` bundles a traditional bytecode interpreter with a runtime for the JVM
-as per the Java SE7 specification described in the link [below][^1], during the
+as per the Java SE7 specification described in the link below[^1], during the
 execution the bytecode is profiled, when an opcode jumps backwards (such as in
 a loop) a trace is recorded. The trace contains all the information needed to
 compile the bytecode to native assembly, such as the loop start, exit and body.
