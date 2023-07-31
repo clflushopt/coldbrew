@@ -25,7 +25,7 @@ pub struct Type {
 
 impl Type {
     /// Returns the size in words of a given type.
-    fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         match self.t {
             BaseTypeKind::Int | BaseTypeKind::Float => 1,
             BaseTypeKind::Long | BaseTypeKind::Double => 2,
@@ -48,7 +48,7 @@ pub struct Program {
 pub struct Method {
     name_index: u16,
     return_type: Type,
-    arg_types: Vec<Type>,
+    pub arg_types: Vec<Type>,
     max_stack: u16,
     max_locals: u16,
     pub code: Vec<u8>,

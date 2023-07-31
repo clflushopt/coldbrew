@@ -740,6 +740,18 @@ impl Runtime {
                     self.frames.pop();
                 }
                 // TODO: Add InvokeVirtual/InvokeStatic
+                OPCode::InvokeStatic => {
+                    let name_index = match &inst.params {
+                        Some(params) => match params[0] {
+                            Value::Int(index) => index,
+                            _ => panic!(
+                                "InvokeStatic expected integer parameter"
+                            ),
+                        },
+                        _ => panic!("InvokeStatic expected parameters"),
+                    };
+                    self.invoke(name_index.try_into().unwrap())
+                }
                 OPCode::NOP | OPCode::Dup => (),
                 _ => (),
             }
@@ -768,6 +780,41 @@ impl Runtime {
             Some(Value::Int(v)) => (v - 3) as usize,
             _ => panic!("Expected parameter to be of type Value::Int"),
         }
+    }
+
+    /// Invoke a function by creating a new stack frame, building the locals
+    /// and pushing the new frame into the runtime stack.
+    fn invoke(&mut self, method_name_index: usize) {
+        let method = &self.program.methods[&method_name_index];
+        let mut stack = vec![];
+        let mut locals = HashMap::new();
+        let arg_types = method.arg_types.clone();
+        let mut key = arg_types.iter().map(|arg_type| arg_type.size()).sum();
+
+        for arg_type in arg_types.iter().rev() {
+            key -= arg_type.size();
+            let val = self.pop().unwrap();
+            locals.insert(key, val);
+            println!("Arg addr: {key} = {val:?}");
+        }
+        assert_eq!(key, 0);
+        println!(
+            "method {} stack {:?} locals {:?} {:?}",
+            method_name_index,
+            stack.len(),
+            locals.get(&0).unwrap(),
+            locals.get(&1).unwrap(),
+        );
+        let pc = ProgramCounter {
+            instruction_index: 0,
+            method_index: method_name_index,
+        };
+        let frame = Frame {
+            pc: pc,
+            stack: stack,
+            locals: locals,
+        };
+        self.frames.push(frame)
     }
 
     /// Returns the next instruction to execute.
@@ -924,6 +971,24 @@ mod tests {
             let mut runtime = Runtime::new(program);
             runtime.run();
             assert_eq!(runtime.top_return_value(), Some(Value::Int(2)));
+        }
+    }
+
+    #[test]
+    fn function_calls_work() {
+        let test_files = vec!["support/FuncCall.class"];
+        for test_file in test_files {
+            println!("Testing : {test_file}");
+            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+            let path = Path::new(&env_var).join(test_file);
+            let class_file_bytes = read_class_file(&path);
+            let result = JVMParser::parse(&class_file_bytes);
+            assert!(result.is_ok());
+            let class_file = result.unwrap();
+            let program = Program::new(&class_file);
+            let mut runtime = Runtime::new(program);
+            runtime.run();
+            assert_eq!(runtime.top_return_value(), Some(Value::Int(500)));
         }
     }
 }
