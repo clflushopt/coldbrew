@@ -32,10 +32,13 @@ to the interpreter.
 ## References
 
 [1] [Java SE7 Spec](https://docs.oracle.com/javase/specs/jvms/se7/html/)
+
 [2] [TigerShrimp: An Understandable Tracing JIT
 Compiler](https://odr.chalmers.se/server/api/core/bitstreams/87898837-623a-46f0-bcdc-06d2bf10805d/content)
+
 [3] [Higgs: A New Tracing JIT for
 JavaScript](https://pointersgonewild.com/2012/12/08/higgs-my-new-tracing-jit-for-javascript/)
+
 [4] [Github/TigerShrimp
 - C++](https://github.com/TigerShrimp/TracingJITCompiler)
 
