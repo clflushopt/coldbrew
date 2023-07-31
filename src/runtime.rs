@@ -1,6 +1,7 @@
 //! JVM runtime module responsible for creating a new runtime
 //! environment and running programs.
 use crate::bytecode::OPCode;
+use crate::jvm::CPInfo;
 use crate::program::{BaseTypeKind, Program};
 
 use std::collections::HashMap;
@@ -826,7 +827,40 @@ impl Runtime {
                             self.program.find_method(method_ref_index);
                         Some(vec![Value::Int(method_name_index)])
                     }
-                    // TODO: add LDC2_W and LDC instructions
+                    OPCode::Ldc2W => {
+                        let lo = self.next(&mut frame);
+                        let hi = self.next(&mut frame);
+                        let index = Self::encode_arg(lo, hi);
+                        let entry = &self.program.constant_pool[index as usize];
+
+                        match entry {
+                            CPInfo::ConstantDouble { hi_bytes, lo_bytes } => {
+                                let result = ((*hi_bytes as i64) << 32)
+                                    + (*lo_bytes as i64);
+                                Some(vec![Value::Double(result as f64)])
+                            }
+                            CPInfo::ConstantLong { hi_bytes, lo_bytes } => {
+                                let result = ((*hi_bytes as i64) << 32)
+                                    + (*lo_bytes as i64);
+                                Some(vec![Value::Long(result)])
+                            }
+                            _ => panic!("unexpected entry in constant pool"),
+                        }
+                    }
+                    OPCode::Ldc => {
+                        let index = self.next(&mut frame);
+                        let entry = &self.program.constant_pool[index as usize];
+
+                        match entry {
+                            CPInfo::ConstantFloat { bytes } => {
+                                Some(vec![Value::Float(*bytes as f32)])
+                            }
+                            CPInfo::ConstantInteger { bytes } => {
+                                Some(vec![Value::Int(*bytes as i32)])
+                            }
+                            _ => panic!("unexpected entry in constant pool"),
+                        }
+                    }
                     _ => None,
                 };
                 println!("Frame : {frame:?}");
