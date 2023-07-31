@@ -39,8 +39,7 @@ Compiler](https://odr.chalmers.se/server/api/core/bitstreams/87898837-623a-46f0-
 [3] [Higgs: A New Tracing JIT for
 JavaScript](https://pointersgonewild.com/2012/12/08/higgs-my-new-tracing-jit-for-javascript/)
 
-[4] [Github/TigerShrimp
-- C++](https://github.com/TigerShrimp/TracingJITCompiler)
+[4] [Github/TigerShrimp](https://github.com/TigerShrimp/TracingJITCompiler)
 
 ## Acknowledgments
 
