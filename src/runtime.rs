@@ -307,9 +307,12 @@ impl Runtime {
     }
 
     /// Jump with a relative offset.
-    fn jump(&mut self, offset: usize) {
+    fn jump(&mut self, offset: i32) {
         if let Some(frame) = self.frames.last_mut() {
-            frame.pc.instruction_index += offset;
+            println!("Jumping from {}", frame.pc.instruction_index);
+            frame.pc.instruction_index = (frame.pc.instruction_index as isize
+                + offset as isize)
+                as usize;
         }
     }
 
@@ -458,7 +461,9 @@ impl Runtime {
                     } else {
                         panic!("Instruction IInc is missing parameters")
                     };
-                    self.frames[0]
+                    self.frames
+                        .last_mut()
+                        .unwrap()
                         .locals
                         .entry(index)
                         .and_modify(|val| {
@@ -707,6 +712,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a >= b {
+                            println!("{:?} > {:?} jumping..", a, b);
                             self.jump(relative_offset);
                         }
                     }
@@ -722,6 +728,7 @@ impl Runtime {
                         |params| Self::get_relative_offset(params),
                     );
 
+                    println!("GOTO => Relative Offset {relative_offset}");
                     self.jump(relative_offset);
                 }
                 // Return with value.
@@ -753,7 +760,7 @@ impl Runtime {
                     self.invoke(name_index.try_into().unwrap())
                 }
                 OPCode::NOP | OPCode::Dup => (),
-                _ => (),
+                _ => todo!(),
             }
         }
         println!("Frames : {:?}", self.frames);
@@ -762,22 +769,25 @@ impl Runtime {
     /// Returns the opcode parameter encoded as two `u8` values in the bytecode
     /// as an `i32`.
     const fn encode_arg(lo: u8, hi: u8) -> i32 {
-        (lo as i32) << 8 | hi as i32
+        let arg = (lo as i16) << 8 | hi as i16;
+        arg as i32
     }
 
     /// Returns the next bytecode value in the current method.
     fn next(&mut self, frame: &mut Frame) -> u8 {
         let method_index = frame.method_index();
         let code = self.program.code(method_index);
+        println!("Code : {:?}", code);
         let bc = code[frame.instruction_index()];
         frame.inc_instruction_index();
         bc
     }
 
     /// Returns the relative offset from the mnemonics parameters list.
-    fn get_relative_offset(params: &[Value]) -> usize {
+    fn get_relative_offset(params: &[Value]) -> i32 {
+        println!("GetRelativeOffset: {params:?}");
         match params.get(0) {
-            Some(Value::Int(v)) => (v - 3) as usize,
+            Some(Value::Int(v)) => (v - 3) as i32,
             _ => panic!("Expected parameter to be of type Value::Int"),
         }
     }
@@ -799,11 +809,10 @@ impl Runtime {
         }
         assert_eq!(key, 0);
         println!(
-            "method {} stack {:?} locals {:?} {:?}",
+            "method {} stack {:?} locals {:?}",
             method_name_index,
             stack.len(),
-            locals.get(&0).unwrap(),
-            locals.get(&1).unwrap(),
+            &locals,
         );
         let pc = ProgramCounter {
             instruction_index: 0,
@@ -989,6 +998,24 @@ mod tests {
             let mut runtime = Runtime::new(program);
             runtime.run();
             assert_eq!(runtime.top_return_value(), Some(Value::Int(500)));
+        }
+    }
+
+    #[test]
+    fn loops_work() {
+        let test_files = vec!["support/Loop.class"];
+        for test_file in test_files {
+            println!("Testing : {test_file}");
+            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+            let path = Path::new(&env_var).join(test_file);
+            let class_file_bytes = read_class_file(&path);
+            let result = JVMParser::parse(&class_file_bytes);
+            assert!(result.is_ok());
+            let class_file = result.unwrap();
+            let program = Program::new(&class_file);
+            let mut runtime = Runtime::new(program);
+            runtime.run();
+            assert_eq!(runtime.top_return_value(), Some(Value::Int(1000)));
         }
     }
 }
