@@ -75,6 +75,7 @@ fn main() {
         // 3. Interepreter executes bytecode and records a trace.
         //  When trace is hot it is compiled to assembly
         let mut runtime = Runtime::new(program);
+        println!("[+] Running program");
         match runtime.run() {
             Ok(()) => {
                 println!("[+] Program finished running successfully !");
