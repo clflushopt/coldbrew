@@ -738,6 +738,7 @@ impl Runtime {
                 | OPCode::DReturn => {
                     if let Some(mut frame) = self.frames.pop() {
                         let value = frame.stack.pop().unwrap();
+                        // This is for debugging purposes.
                         self.return_values.push(value);
                         self.push(value);
                     }
@@ -759,7 +760,11 @@ impl Runtime {
                     };
                     self.invoke(name_index.try_into().unwrap())
                 }
-                OPCode::NOP | OPCode::Dup => (),
+                OPCode::InvokeVirtual => {
+                    let value = self.pop();
+                    println!("System.out.println : {:?}", value);
+                }
+                OPCode::GetStatic | OPCode::NOP | OPCode::Dup => (),
                 _ => todo!(),
             }
         }
@@ -1016,6 +1021,28 @@ mod tests {
             let mut runtime = Runtime::new(program);
             runtime.run();
             assert_eq!(runtime.top_return_value(), Some(Value::Int(1000)));
+        }
+    }
+
+    #[test]
+    fn loops_with_func_calls() {
+        let test_files = vec!["support/MultiFuncCall.class"];
+        for test_file in test_files {
+            println!("Testing : {test_file}");
+            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+            let path = Path::new(&env_var).join(test_file);
+            let class_file_bytes = read_class_file(&path);
+            let result = JVMParser::parse(&class_file_bytes);
+            assert!(result.is_ok());
+            let class_file = result.unwrap();
+            let program = Program::new(&class_file);
+            let mut runtime = Runtime::new(program);
+            runtime.run();
+            // The function threeArgs always returns 5 so at the last
+            // call the debugging return_values stack will have its last
+            // return value although the program in this class has a main
+            // with void return.
+            assert_eq!(runtime.top_return_value(), Some(Value::Int(5)));
         }
     }
 }

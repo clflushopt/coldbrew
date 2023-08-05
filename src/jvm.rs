@@ -322,10 +322,13 @@ impl JVMParser {
         // let mut constant_pool = Vec::with_capacity(constant_pool_count.into());
         let mut constant_pool =
             vec![CPInfo::Unspecified; constant_pool_count as usize];
+        println!("Constant Pool : {}", constant_pool.len());
         // The first entry in the pool is at index 1 according to JVM
         // spec.
         for mut ii in 1..constant_pool_count as usize {
+            println!("ii : {}", ii);
             let tag = buffer.read_u8()?;
+            println!("Tag : {:?}", ConstantKind::from(tag));
             match ConstantKind::from(tag) {
                 ConstantKind::Class => {
                     constant_pool[ii] = CPInfo::ConstantClass {
@@ -443,9 +446,11 @@ impl JVMParser {
 
         let (fields_count, fields) = parse_fields(&mut buffer, &constant_pool);
 
+        println!("Going to parse methods");
         let (methods_count, methods) =
             parse_methods(&mut buffer, &constant_pool);
 
+        println!("Going to parse attribute info");
         let (attributes_count, attributes) =
             parse_attribute_info(&mut buffer, &constant_pool);
 
@@ -501,11 +506,13 @@ fn parse_methods(
     constant_pool: &[CPInfo],
 ) -> (u16, Vec<MethodInfo>) {
     let methods_count = reader.read_u16::<BigEndian>().unwrap();
+    println!("Method Count : {}", methods_count);
     let mut methods: Vec<MethodInfo> = Vec::new();
 
     for _ in 0..methods_count {
         let access_flag = reader.read_u16::<BigEndian>().unwrap();
         let name_index = reader.read_u16::<BigEndian>().unwrap();
+        println!("Method name {:?} ", constant_pool[name_index as usize]);
         let descriptor_index = reader.read_u16::<BigEndian>().unwrap();
         let (_, attributes) = parse_attribute_info(reader, constant_pool);
         methods.push(MethodInfo {
@@ -561,6 +568,7 @@ fn parse_attribute_info(
     constant_pool: &[CPInfo],
 ) -> (u16, HashMap<String, AttributeInfo>) {
     let attribute_count = reader.read_u16::<BigEndian>().unwrap();
+    println!("Attribute count : {}", attribute_count);
     let mut attributes: HashMap<String, AttributeInfo> = HashMap::new();
     for _ in 0..attribute_count {
         let attribute_name_index = reader.read_u16::<BigEndian>().unwrap();
@@ -695,12 +703,15 @@ fn parse_stack_frame_entry(reader: &mut impl Read, tag: u8) -> StackMapFrame {
         255 => {
             let offset_delta = reader.read_u16::<BigEndian>().unwrap();
             let n_locals_entries = reader.read_u16::<BigEndian>().unwrap();
+            let locals = parse_verification_info(reader, n_locals_entries);
+            println!("n_local_entries : {} ", n_locals_entries);
             let n_stack_entries = reader.read_u16::<BigEndian>().unwrap();
+            let stack = parse_verification_info(reader, n_stack_entries);
             StackMapFrame {
                 t: StackMapFrameType::Full,
                 offset_delta,
-                locals: parse_verification_info(reader, n_locals_entries),
-                stack: parse_verification_info(reader, n_stack_entries),
+                locals,
+                stack,
             }
         }
         _ => panic!("Unexpected tag entry {tag}"),
@@ -742,6 +753,7 @@ pub fn read_class_file(fp: &Path) -> Vec<u8> {
     let mut f = File::open(fp).unwrap();
     let mut buffer = Vec::new();
     f.read_to_end(&mut buffer).unwrap();
+    println!("Class File Buffer : {:?}", &buffer);
     buffer
 }
 
