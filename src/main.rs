@@ -5,7 +5,7 @@ use coldbrew::jvm::{read_class_file, JVMParser};
 use coldbrew::program::Program;
 use coldbrew::runtime::Runtime;
 
-const USAGE_CMD: &'static str = r"
+const USAGE_CMD: &str = r"
     Coldbrew Tracing JIT usage guide :
 
     Run `coldbrew unit` to run small test programs.
@@ -38,7 +38,7 @@ fn main() {
         let path = match path {
             Ok(entry) => entry.path(),
             Err(err) => {
-                panic!("Error occured when reading file paths : {}", err)
+                panic!("Error occured when reading file paths : {err}")
             }
         };
         if let Some(extension) = path.extension() {
