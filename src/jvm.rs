@@ -781,7 +781,8 @@ mod tests {
     #[test]
     fn can_you_read_class_file() {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let path = Path::new(&env_var).join("support/SingleFuncCall.class");
+        let path =
+            Path::new(&env_var).join("support/tests//SingleFuncCall.class");
         let class_file_bytes = read_class_file(&path).unwrap_or_else(|_| {
             panic!("Failed to parse file : {:?}", path.as_os_str())
         });
@@ -799,7 +800,8 @@ mod tests {
     #[test]
     fn can_parse_class_file_header() {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let path = Path::new(&env_var).join("support/SingleFuncCall.class");
+        let path =
+            Path::new(&env_var).join("support/tests//SingleFuncCall.class");
         let class_file_bytes = read_class_file(&path).unwrap_or_else(|_| {
             panic!("Failed to parse file : {:?}", path.as_os_str())
         });

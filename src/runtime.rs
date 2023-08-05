@@ -943,119 +943,66 @@ mod tests {
     use std::env;
     use std::path::Path;
 
-    #[test]
-    fn compare_operations_works() {
-        let test_files = vec![
-            "support/CompareEq.class",
-            "support/CompareNe.class",
-            "support/CompareGt.class",
-            "support/CompareLt.class",
-            "support/CompareGe.class",
-            "support/CompareLe.class",
-        ];
-        for test_file in test_files {
-            println!("Testing : {test_file}");
-            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-            let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes =
-                read_class_file(&path).unwrap_or_else(|_| {
-                    panic!("Failed to parse file : {:?}", path.as_os_str())
-                });
-            let result = JVMParser::parse(&class_file_bytes);
-            assert!(result.is_ok());
-            let class_file = result.unwrap();
-            let program = Program::new(&class_file);
-            let mut runtime = Runtime::new(program);
-            assert!(runtime.run().is_ok());
-            assert_eq!(runtime.top_return_value(), Some(Value::Int(1)));
-        }
+    // Macro to generate unit tests for the runtime.
+    macro_rules! test_runtime_case {
+        ($name: ident, $test_files:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                for test_file in $test_files {
+                    let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+                    let path = Path::new(&env_var).join(test_file);
+                    let class_file_bytes = read_class_file(&path)
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Failed to parse file : {:?}",
+                                path.as_os_str()
+                            )
+                        });
+                    let class_file = JVMParser::parse(&class_file_bytes);
+                    assert!(class_file.is_ok());
+                    let program = Program::new(&class_file.unwrap());
+                    let mut runtime = Runtime::new(program);
+                    assert!(runtime.run().is_ok());
+                    assert_eq!(runtime.top_return_value(), $expected);
+                }
+            }
+        };
     }
 
-    #[test]
-    fn remainder_operations_works() {
-        let test_files = vec!["support/Rem.class"];
-        for test_file in test_files {
-            println!("Testing : {test_file}");
-            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-            let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes =
-                read_class_file(&path).unwrap_or_else(|_| {
-                    panic!("Failed to parse file : {:?}", path.as_os_str())
-                });
-            let result = JVMParser::parse(&class_file_bytes);
-            assert!(result.is_ok());
-            let class_file = result.unwrap();
-            let program = Program::new(&class_file);
-            let mut runtime = Runtime::new(program);
-            assert!(runtime.run().is_ok());
-            assert_eq!(runtime.top_return_value(), Some(Value::Int(2)));
-        }
-    }
+    test_runtime_case!(
+        comparison,
+        vec![
+            "support/tests/CompareEq.class",
+            "support/tests/CompareNe.class",
+            "support/tests/CompareGt.class",
+            "support/tests/CompareLt.class",
+            "support/tests/CompareGe.class",
+            "support/tests/CompareLe.class",
+        ],
+        Some(Value::Int(1))
+    );
 
-    #[test]
-    fn function_calls_work() {
-        let test_files = vec!["support/FuncCall.class"];
-        for test_file in test_files {
-            println!("Testing : {test_file}");
-            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-            let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes =
-                read_class_file(&path).unwrap_or_else(|_| {
-                    panic!("Failed to parse file : {:?}", path.as_os_str())
-                });
-            let result = JVMParser::parse(&class_file_bytes);
-            assert!(result.is_ok());
-            let class_file = result.unwrap();
-            let program = Program::new(&class_file);
-            let mut runtime = Runtime::new(program);
-            assert!(runtime.run().is_ok());
-            assert_eq!(runtime.top_return_value(), Some(Value::Int(500)));
-        }
-    }
+    test_runtime_case!(
+        remainder,
+        vec!["support/tests/Rem.class"],
+        Some(Value::Int(2))
+    );
 
-    #[test]
-    fn loops_work() {
-        let test_files = vec!["support/Loop.class"];
-        for test_file in test_files {
-            println!("Testing : {test_file}");
-            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-            let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes =
-                read_class_file(&path).unwrap_or_else(|_| {
-                    panic!("Failed to parse file : {:?}", path.as_os_str())
-                });
-            let result = JVMParser::parse(&class_file_bytes);
-            assert!(result.is_ok());
-            let class_file = result.unwrap();
-            let program = Program::new(&class_file);
-            let mut runtime = Runtime::new(program);
-            assert!(runtime.run().is_ok());
-            assert_eq!(runtime.top_return_value(), Some(Value::Int(1000)));
-        }
-    }
+    test_runtime_case!(
+        function_calls,
+        vec!["support/tests/FuncCall.class"],
+        Some(Value::Int(500))
+    );
 
-    #[test]
-    fn loops_with_func_calls() {
-        let test_files = vec!["support/MultiFuncCall.class"];
-        for test_file in test_files {
-            println!("Testing : {test_file}");
-            let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
-            let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes =
-                read_class_file(&path).unwrap_or_else(|_| {
-                    panic!("Failed to parse file : {:?}", path.as_os_str())
-                });
-            let result = JVMParser::parse(&class_file_bytes);
-            assert!(result.is_ok());
-            let class_file = result.unwrap();
-            let program = Program::new(&class_file);
-            let mut runtime = Runtime::new(program);
-            assert!(runtime.run().is_ok());
-            // The function threeArgs always returns 5 so at the last
-            // call the debugging return_values stack will have its last
-            // return value although the program in this class has a main
-            // with void return.
-            assert_eq!(runtime.top_return_value(), Some(Value::Int(5)));
-        }
-    }
+    test_runtime_case!(
+        loops,
+        vec!["support/tests/Loop.class"],
+        Some(Value::Int(1000))
+    );
+
+    test_runtime_case!(
+        loop_with_function_call,
+        vec!["support/tests/MultiFuncCall.class"],
+        Some(Value::Int(5))
+    );
 }
