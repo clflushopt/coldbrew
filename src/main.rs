@@ -1,18 +1,40 @@
+use std::env;
+use std::process::exit;
+
 use coldbrew::jvm::{read_class_file, JVMParser};
 use coldbrew::program::Program;
 use coldbrew::runtime::Runtime;
 
+const USAGE_CMD: &'static str = r"
+    Coldbrew Tracing JIT usage guide :
+
+    Run `coldbrew unit` to run small test programs.
+    Run `coldbrew integration` to run end to end CPU intensive test programs.
+    Run `coldbrew help` to see this message.
+";
+
 fn main() {
+    // Decide which test files to run.
+    let args: Vec<String> = env::args().collect();
+    let folder = match args[1].as_str() {
+        "unit" => r"./support/tests/",
+        "integration" => r"./support/integration/",
+        "help" => {
+            println!("{USAGE_CMD}");
+            exit(1);
+        }
+        _ => panic!(
+            "Unexpected argument use `coldbrew help` to see usage guide."
+        ),
+    };
+
     let mut paths: Vec<std::path::PathBuf> = Vec::new();
     let to_skip: Vec<&str> = vec![
         "DoubleFibonacci.class",
         "MixedTypes.class",
         "MixedArg.class",
     ];
-    for path in std::path::Path::new(r"./support/integration/")
-        .read_dir()
-        .unwrap()
-    {
+    for path in std::path::Path::new(folder).read_dir().unwrap() {
         let path = match path {
             Ok(entry) => entry.path(),
             Err(err) => {
