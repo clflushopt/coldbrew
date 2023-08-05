@@ -177,10 +177,33 @@ pub struct Instruction {
 
 /// Program counter for the runtime points to the current instruction
 /// and method we're executing.
-#[derive(Debug, Clone, Copy)]
-struct ProgramCounter {
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct ProgramCounter {
     instruction_index: usize,
     method_index: usize,
+}
+
+impl ProgramCounter {
+    pub fn new() -> ProgramCounter {
+        ProgramCounter {
+            instruction_index: 0,
+            method_index: 0,
+        }
+    }
+
+    pub fn get_instruction_index(&self) -> usize {
+        self.instruction_index
+    }
+
+    pub fn get_method_index(&self) -> usize {
+        self.method_index
+    }
+}
+
+impl Default for ProgramCounter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Frames are used to store data and partial results within a method's scope.
