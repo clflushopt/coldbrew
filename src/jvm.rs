@@ -85,8 +85,9 @@ enum ConstantKind {
     MethodType = 16,
     Dynamic = 17,
     InvokeDynamic = 18,
-    Module = 19,
-    Package = 20,
+    // Unspecified or unsupported constant kinds.
+    // Module = 19,
+    // Package = 20,
     Unspecified,
 }
 
@@ -265,22 +266,22 @@ impl MethodInfo {
 /// `JVMClassFile` represents a Java class file.
 #[derive(Debug, Clone)]
 pub struct JVMClassFile {
-    magic: u32,
-    minor_version: u16,
-    major_version: u16,
-    constant_pool_count: u16,
+    _magic: u32,
+    _minor_version: u16,
+    _major_version: u16,
+    _constant_pool_count: u16,
     constant_pool: Vec<CPInfo>,
-    access_flags: u16,
-    this_class: u16,
-    super_class: u16,
-    interfaces_count: u16,
-    interfaces: Vec<u16>,
-    fields_count: u16,
-    fields: Vec<FieldInfo>,
-    methods_count: u16,
+    _access_flags: u16,
+    _this_class: u16,
+    _super_class: u16,
+    _interfaces_count: u16,
+    _interfaces: Vec<u16>,
+    _fields_count: u16,
+    _fields: Vec<FieldInfo>,
+    _methods_count: u16,
     methods: Vec<MethodInfo>,
-    attributes_count: u16,
-    attributes: HashMap<String, AttributeInfo>,
+    _attributes_count: u16,
+    _attributes: HashMap<String, AttributeInfo>,
 }
 
 impl JVMClassFile {
@@ -325,9 +326,10 @@ impl JVMParser {
         println!("Constant Pool : {}", constant_pool.len());
         // The first entry in the pool is at index 1 according to JVM
         // spec.
-        for mut ii in 1..constant_pool_count as usize {
+        #[allow(unused_assignments)]
+        (1..constant_pool_count as usize).for_each(|mut ii| {
             println!("ii : {}", ii);
-            let tag = buffer.read_u8()?;
+            let tag = buffer.read_u8().unwrap();
             println!("Tag : {:?}", ConstantKind::from(tag));
             match ConstantKind::from(tag) {
                 ConstantKind::Class => {
@@ -428,9 +430,13 @@ impl JVMParser {
                         name_and_type_index,
                     };
                 }
-                _ => panic!("Unexpected constant kind"),
+                _ => panic!(
+                    "Unexpected constant kind {:?} with tag {}",
+                    ConstantKind::from(tag),
+                    tag
+                ),
             }
-        }
+        });
 
         let access_flags = buffer.read_u16::<BigEndian>()?;
         let this_class = buffer.read_u16::<BigEndian>()?;
@@ -455,22 +461,22 @@ impl JVMParser {
             parse_attribute_info(&mut buffer, &constant_pool);
 
         let jvm_class_file = JVMClassFile {
-            magic,
-            minor_version,
-            major_version,
-            constant_pool_count,
+            _magic: magic,
+            _minor_version: minor_version,
+            _major_version: major_version,
+            _constant_pool_count: constant_pool_count,
             constant_pool,
-            access_flags,
-            this_class,
-            super_class,
-            interfaces_count,
-            interfaces,
-            fields_count,
-            fields,
-            methods_count,
+            _access_flags: access_flags,
+            _this_class: this_class,
+            _super_class: super_class,
+            _interfaces_count: interfaces_count,
+            _interfaces: interfaces,
+            _fields_count: fields_count,
+            _fields: fields,
+            _methods_count: methods_count,
             methods,
-            attributes_count,
-            attributes,
+            _attributes_count: attributes_count,
+            _attributes: attributes,
         };
         Ok(jvm_class_file)
     }
@@ -745,16 +751,25 @@ fn parse_verification_info(
 /// Helper function to read file into a buffer.
 /// # Panics
 /// Function panics on any `File::open` error.
-#[must_use]
-pub fn read_class_file(fp: &Path) -> Vec<u8> {
+pub fn read_class_file(fp: &Path) -> io::Result<Vec<u8>> {
     use std::fs::File;
     use std::io::prelude::*;
 
     let mut f = File::open(fp).unwrap();
     let mut buffer = Vec::new();
-    f.read_to_end(&mut buffer).unwrap();
-    println!("Class File Buffer : {:?}", &buffer);
-    buffer
+
+    match f.read_to_end(&mut buffer) {
+        Ok(bytes_read) => {
+            assert!(bytes_read == f.metadata()?.len() as usize);
+            assert!(
+                u32::from_be_bytes(
+                    buffer[0..4].try_into().expect("slice with wrong length")
+                ) == JVM_CLASS_FILE_MAGIC
+            );
+            Ok(buffer)
+        }
+        Err(err) => Err(err),
+    }
 }
 
 #[cfg(test)]
@@ -767,30 +782,35 @@ mod tests {
     fn can_you_read_class_file() {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = Path::new(&env_var).join("support/SingleFuncCall.class");
-        let class_file_bytes = read_class_file(&path);
+        let class_file_bytes = read_class_file(&path).unwrap_or_else(|_| {
+            panic!("Failed to parse file : {:?}", path.as_os_str())
+        });
         let result = JVMParser::parse(&class_file_bytes);
         assert!(result.is_ok());
         let class_file = result.unwrap();
-        assert_eq!(JVM_CLASS_FILE_MAGIC, class_file.magic);
+        assert_eq!(JVM_CLASS_FILE_MAGIC, class_file._magic);
         assert!(
-            class_file.minor_version == 0 || class_file.minor_version == 65535
+            class_file._minor_version == 0
+                || class_file._minor_version == 65535
         );
-        assert!(class_file.major_version > 61);
+        assert!(class_file._major_version > 61);
     }
 
     #[test]
     fn can_parse_class_file_header() {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = Path::new(&env_var).join("support/SingleFuncCall.class");
-        let class_file_bytes = read_class_file(&path);
+        let class_file_bytes = read_class_file(&path).unwrap_or_else(|_| {
+            panic!("Failed to parse file : {:?}", path.as_os_str())
+        });
         let result = JVMParser::parse(&class_file_bytes);
         assert!(result.is_ok());
         let class_file = result.unwrap();
         let expected_class_file = JVMClassFile {
-            magic: 3405691582,
-            minor_version: 0,
-            major_version: 63,
-            constant_pool_count: 31,
+            _magic: 3405691582,
+            _minor_version: 0,
+            _major_version: 63,
+            _constant_pool_count: 31,
             constant_pool: vec![
                 CPInfo::Unspecified,
                 CPInfo::ConstantMethodRef {
@@ -884,14 +904,14 @@ mod tests {
                     bytes: "SingleFuncCall.java".to_string(),
                 },
             ],
-            access_flags: 33,
-            this_class: 8,
-            super_class: 2,
-            interfaces_count: 0,
-            interfaces: vec![],
-            fields_count: 0,
-            fields: vec![],
-            methods_count: 3,
+            _access_flags: 33,
+            _this_class: 8,
+            _super_class: 2,
+            _interfaces_count: 0,
+            _interfaces: vec![],
+            _fields_count: 0,
+            _fields: vec![],
+            _methods_count: 3,
             methods: vec![
                 MethodInfo {
                     access_flag: 1,
@@ -945,8 +965,8 @@ mod tests {
                     )]),
                 },
             ],
-            attributes_count: 1,
-            attributes: HashMap::from([(
+            _attributes_count: 1,
+            _attributes: HashMap::from([(
                 "SourceFile".to_string(),
                 AttributeInfo::SourceFileAttribute {
                     source_file_index: 30,
@@ -955,29 +975,38 @@ mod tests {
             )]),
         };
 
-        assert_eq!(class_file.magic, expected_class_file.magic);
-        assert_eq!(class_file.minor_version, expected_class_file.minor_version);
-        assert_eq!(class_file.major_version, expected_class_file.major_version);
+        assert_eq!(class_file._magic, expected_class_file._magic);
         assert_eq!(
-            class_file.constant_pool_count,
-            expected_class_file.constant_pool_count
+            class_file._minor_version,
+            expected_class_file._minor_version
+        );
+        assert_eq!(
+            class_file._major_version,
+            expected_class_file._major_version
+        );
+        assert_eq!(
+            class_file._constant_pool_count,
+            expected_class_file._constant_pool_count
         );
         assert_eq!(class_file.constant_pool, expected_class_file.constant_pool);
-        assert_eq!(class_file.access_flags, expected_class_file.access_flags);
-        assert_eq!(class_file.this_class, expected_class_file.this_class);
-        assert_eq!(class_file.super_class, expected_class_file.super_class);
+        assert_eq!(class_file._access_flags, expected_class_file._access_flags);
+        assert_eq!(class_file._this_class, expected_class_file._this_class);
+        assert_eq!(class_file._super_class, expected_class_file._super_class);
         assert_eq!(
-            class_file.interfaces_count,
-            expected_class_file.interfaces_count
+            class_file._interfaces_count,
+            expected_class_file._interfaces_count
         );
-        assert_eq!(class_file.interfaces, expected_class_file.interfaces);
-        assert_eq!(class_file.fields_count, expected_class_file.fields_count);
-        assert_eq!(class_file.fields, expected_class_file.fields);
-        assert_eq!(class_file.methods_count, expected_class_file.methods_count);
+        assert_eq!(class_file._interfaces, expected_class_file._interfaces);
+        assert_eq!(class_file._fields_count, expected_class_file._fields_count);
+        assert_eq!(class_file._fields, expected_class_file._fields);
+        assert_eq!(
+            class_file._methods_count,
+            expected_class_file._methods_count
+        );
         assert_eq!(class_file.methods, expected_class_file.methods);
         assert_eq!(
-            class_file.attributes_count,
-            expected_class_file.attributes_count
+            class_file._attributes_count,
+            expected_class_file._attributes_count
         );
     }
 }

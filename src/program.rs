@@ -46,14 +46,14 @@ pub struct Program {
 /// Java class method representation for the interpreter.
 #[derive(Debug, Clone)]
 pub struct Method {
-    name_index: u16,
-    return_type: Type,
+    _name_index: u16,
+    _return_type: Type,
     pub arg_types: Vec<Type>,
-    max_stack: u16,
-    max_locals: u16,
+    _max_stack: u16,
+    _max_locals: u16,
     pub code: Vec<u8>,
-    constant: Option<u16>,
-    stack_map_table: Option<Vec<StackMapFrame>>,
+    _constant: Option<u16>,
+    _stack_map_table: Option<Vec<StackMapFrame>>,
 }
 
 impl Program {
@@ -115,14 +115,14 @@ impl Program {
                 };
 
             let method = Method {
-                name_index: method_info.name_index(),
-                return_type,
+                _name_index: method_info.name_index(),
+                _return_type: return_type,
                 arg_types,
-                max_stack,
-                max_locals,
+                _max_stack: max_stack,
+                _max_locals: max_locals,
                 code,
-                constant,
-                stack_map_table,
+                _constant: constant,
+                _stack_map_table: stack_map_table,
             };
             methods.insert(method_info.name_index() as usize, method);
         }
@@ -160,7 +160,7 @@ impl Program {
     // Returns program entry point, in this case the index of the method
     // main.
     pub fn entry_point(&self) -> usize {
-        for (index, _method) in &self.methods {
+        for index in self.methods.keys() {
             match self.constant_pool.get(*index) {
                 Some(constant) => {
                     if let CPInfo::ConstantUtf8 { bytes } = constant {
@@ -283,7 +283,9 @@ mod tests {
     fn can_build_program() {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path = Path::new(&env_var).join("support/Factorial.class");
-        let class_file_bytes = read_class_file(&path);
+        let class_file_bytes = read_class_file(&path).unwrap_or_else(|_| {
+            panic!("Failed to parse file : {:?}", path.as_os_str())
+        });
         let result = JVMParser::parse(&class_file_bytes);
         assert!(result.is_ok());
         let class_file = result.unwrap();
@@ -291,8 +293,8 @@ mod tests {
 
         let methods = vec![
             Method {
-                name_index: 27,
-                return_type: Type {
+                _name_index: 27,
+                _return_type: Type {
                     t: BaseTypeKind::Void,
                     sub_t: None,
                 },
@@ -303,30 +305,30 @@ mod tests {
                         sub_t: None,
                     })),
                 }],
-                max_stack: 2,
-                max_locals: 2,
+                _max_stack: 2,
+                _max_locals: 2,
                 code: vec![
                     16, 12, 184, 0, 7, 60, 178, 0, 13, 27, 182, 0, 19, 177,
                 ],
-                constant: None,
-                stack_map_table: None,
+                _constant: None,
+                _stack_map_table: None,
             },
             Method {
-                name_index: 5,
-                return_type: Type {
+                _name_index: 5,
+                _return_type: Type {
                     t: BaseTypeKind::Void,
                     sub_t: None,
                 },
                 arg_types: vec![],
-                max_stack: 1,
-                max_locals: 1,
+                _max_stack: 1,
+                _max_locals: 1,
                 code: vec![42, 183, 0, 1, 177],
-                constant: None,
-                stack_map_table: None,
+                _constant: None,
+                _stack_map_table: None,
             },
             Method {
-                name_index: 11,
-                return_type: Type {
+                _name_index: 11,
+                _return_type: Type {
                     t: BaseTypeKind::Int,
                     sub_t: None,
                 },
@@ -334,19 +336,19 @@ mod tests {
                     t: BaseTypeKind::Int,
                     sub_t: None,
                 }],
-                max_stack: 2,
-                max_locals: 3,
+                _max_stack: 2,
+                _max_locals: 3,
                 code: vec![
                     4, 60, 5, 61, 28, 26, 163, 0, 13, 27, 28, 104, 60, 132, 2,
                     1, 167, 255, 244, 27, 172,
                 ],
-                constant: None,
-                stack_map_table: None,
+                _constant: None,
+                _stack_map_table: None,
             },
         ];
 
         for method in methods {
-            let name_index = method.name_index;
+            let name_index = method._name_index;
             let program_method =
                 program.methods.get(&(name_index as usize)).unwrap();
             assert_eq!(method.code, program_method.code);

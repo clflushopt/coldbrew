@@ -18,7 +18,7 @@ pub enum RuntimeErrorKind {}
 /// possible execution failures.
 #[derive(Debug, Clone)]
 pub struct RuntimeError {
-    kind: RuntimeErrorKind,
+    _kind: RuntimeErrorKind,
 }
 
 impl fmt::Display for RuntimeError {
@@ -91,7 +91,9 @@ impl Value {
     /// Computes the sum of two values of the same type.
     pub fn add(lhs: &Self, rhs: &Self) -> Self {
         match (lhs, rhs) {
-            (Self::Int(lhs), Self::Int(rhs)) => Self::Int(lhs + rhs),
+            (Self::Int(lhs), Self::Int(rhs)) => {
+                Self::Int(lhs.wrapping_add(*rhs))
+            }
             (Self::Long(lhs), Self::Long(rhs)) => Self::Long(lhs + rhs),
             (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs + rhs),
             (Self::Double(lhs), Self::Double(rhs)) => Self::Double(lhs + rhs),
@@ -792,7 +794,7 @@ impl Runtime {
     fn get_relative_offset(params: &[Value]) -> i32 {
         println!("GetRelativeOffset: {params:?}");
         match params.get(0) {
-            Some(Value::Int(v)) => (v - 3) as i32,
+            Some(Value::Int(v)) => v - 3,
             _ => panic!("Expected parameter to be of type Value::Int"),
         }
     }
@@ -801,7 +803,7 @@ impl Runtime {
     /// and pushing the new frame into the runtime stack.
     fn invoke(&mut self, method_name_index: usize) {
         let method = &self.program.methods[&method_name_index];
-        let mut stack = vec![];
+        let stack = vec![];
         let mut locals = HashMap::new();
         let arg_types = method.arg_types.clone();
         let mut key = arg_types.iter().map(|arg_type| arg_type.size()).sum();
@@ -823,11 +825,7 @@ impl Runtime {
             instruction_index: 0,
             method_index: method_name_index,
         };
-        let frame = Frame {
-            pc: pc,
-            stack: stack,
-            locals: locals,
-        };
+        let frame = Frame { pc, stack, locals };
         self.frames.push(frame)
     }
 
@@ -959,13 +957,16 @@ mod tests {
             println!("Testing : {test_file}");
             let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
             let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes = read_class_file(&path);
+            let class_file_bytes =
+                read_class_file(&path).unwrap_or_else(|_| {
+                    panic!("Failed to parse file : {:?}", path.as_os_str())
+                });
             let result = JVMParser::parse(&class_file_bytes);
             assert!(result.is_ok());
             let class_file = result.unwrap();
             let program = Program::new(&class_file);
             let mut runtime = Runtime::new(program);
-            runtime.run();
+            assert!(runtime.run().is_ok());
             assert_eq!(runtime.top_return_value(), Some(Value::Int(1)));
         }
     }
@@ -977,13 +978,16 @@ mod tests {
             println!("Testing : {test_file}");
             let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
             let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes = read_class_file(&path);
+            let class_file_bytes =
+                read_class_file(&path).unwrap_or_else(|_| {
+                    panic!("Failed to parse file : {:?}", path.as_os_str())
+                });
             let result = JVMParser::parse(&class_file_bytes);
             assert!(result.is_ok());
             let class_file = result.unwrap();
             let program = Program::new(&class_file);
             let mut runtime = Runtime::new(program);
-            runtime.run();
+            assert!(runtime.run().is_ok());
             assert_eq!(runtime.top_return_value(), Some(Value::Int(2)));
         }
     }
@@ -995,13 +999,16 @@ mod tests {
             println!("Testing : {test_file}");
             let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
             let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes = read_class_file(&path);
+            let class_file_bytes =
+                read_class_file(&path).unwrap_or_else(|_| {
+                    panic!("Failed to parse file : {:?}", path.as_os_str())
+                });
             let result = JVMParser::parse(&class_file_bytes);
             assert!(result.is_ok());
             let class_file = result.unwrap();
             let program = Program::new(&class_file);
             let mut runtime = Runtime::new(program);
-            runtime.run();
+            assert!(runtime.run().is_ok());
             assert_eq!(runtime.top_return_value(), Some(Value::Int(500)));
         }
     }
@@ -1013,13 +1020,16 @@ mod tests {
             println!("Testing : {test_file}");
             let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
             let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes = read_class_file(&path);
+            let class_file_bytes =
+                read_class_file(&path).unwrap_or_else(|_| {
+                    panic!("Failed to parse file : {:?}", path.as_os_str())
+                });
             let result = JVMParser::parse(&class_file_bytes);
             assert!(result.is_ok());
             let class_file = result.unwrap();
             let program = Program::new(&class_file);
             let mut runtime = Runtime::new(program);
-            runtime.run();
+            assert!(runtime.run().is_ok());
             assert_eq!(runtime.top_return_value(), Some(Value::Int(1000)));
         }
     }
@@ -1031,13 +1041,16 @@ mod tests {
             println!("Testing : {test_file}");
             let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
             let path = Path::new(&env_var).join(test_file);
-            let class_file_bytes = read_class_file(&path);
+            let class_file_bytes =
+                read_class_file(&path).unwrap_or_else(|_| {
+                    panic!("Failed to parse file : {:?}", path.as_os_str())
+                });
             let result = JVMParser::parse(&class_file_bytes);
             assert!(result.is_ok());
             let class_file = result.unwrap();
             let program = Program::new(&class_file);
             let mut runtime = Runtime::new(program);
-            runtime.run();
+            assert!(runtime.run().is_ok());
             // The function threeArgs always returns 5 so at the last
             // call the debugging return_values stack will have its last
             // return value although the program in this class has a main
