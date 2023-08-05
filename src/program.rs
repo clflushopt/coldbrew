@@ -142,10 +142,6 @@ impl Program {
                 name_and_type_index,
                 ..
             } => {
-                println!("Name and Type Index : {name_and_type_index}");
-                println!("{:?}", &self.constant_pool);
-                let cp = &self.constant_pool[name_and_type_index as usize];
-                println!("CP: {:?}", cp);
                 if let CPInfo::ConstantNameAndType { name_index, .. } =
                     self.constant_pool[name_and_type_index as usize]
                 {

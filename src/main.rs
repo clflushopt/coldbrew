@@ -16,6 +16,9 @@ const USAGE_CMD: &str = r"
 fn main() {
     // Decide which test files to run.
     let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        panic!("Unexpected argument use `coldbrew help` to see usage guide.");
+    }
     let folder = match args[1].as_str() {
         "unit" => r"./support/tests/",
         "integration" => r"./support/integration/",
@@ -33,6 +36,9 @@ fn main() {
         "DoubleFibonacci.class",
         "MixedTypes.class",
         "MixedArg.class",
+        "MEDouble.class",
+        "FloatFibonacci.class",
+        "LongFibonacci.class",
     ];
     for path in std::path::Path::new(folder).read_dir().unwrap() {
         let path = match path {
@@ -71,7 +77,7 @@ fn main() {
         let mut runtime = Runtime::new(program);
         match runtime.run() {
             Ok(()) => {
-                println!("[+] All programs were run successfully !");
+                println!("[+] Program finished running successfully !");
             }
             Err(err) => println!("Error : {err}"),
         }

@@ -252,12 +252,12 @@ impl Frame {
 /// switching.
 pub struct Runtime {
     // Program to run.
-    // program: Program,
+    program: Program,
+    // Stack frames.
+    frames: Vec<Frame>,
     // Trace profiling statistics, indexed by the program counter
     // where each trace starts.
     // traces: Vec<Trace>,
-    program: Program,
-    frames: Vec<Frame>,
     // used to store return values
     return_values: Vec<Value>,
 }
@@ -286,7 +286,6 @@ impl Runtime {
     pub fn run(&mut self) -> Result<()> {
         while !self.frames.is_empty() {
             let inst = self.fetch();
-            println!("Next instruction: {inst:?}");
             self.eval(&inst);
         }
         Ok(())
@@ -334,7 +333,6 @@ impl Runtime {
     /// Jump with a relative offset.
     fn jump(&mut self, offset: i32) {
         if let Some(frame) = self.frames.last_mut() {
-            println!("Jumping from {}", frame.pc.instruction_index);
             frame.pc.instruction_index = (frame.pc.instruction_index as isize
                 + offset as isize)
                 as usize;
@@ -737,7 +735,6 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a >= b {
-                            println!("{:?} > {:?} jumping..", a, b);
                             self.jump(relative_offset);
                         }
                     }
@@ -753,7 +750,6 @@ impl Runtime {
                         |params| Self::get_relative_offset(params),
                     );
 
-                    println!("GOTO => Relative Offset {relative_offset}");
                     self.jump(relative_offset);
                 }
                 // Return with value.
@@ -793,7 +789,6 @@ impl Runtime {
                 _ => todo!(),
             }
         }
-        println!("Frames : {:?}", self.frames);
     }
 
     /// Returns the opcode parameter encoded as two `u8` values in the bytecode
@@ -807,7 +802,6 @@ impl Runtime {
     fn next(&mut self, frame: &mut Frame) -> u8 {
         let method_index = frame.method_index();
         let code = self.program.code(method_index);
-        println!("Code : {:?}", code);
         let bc = code[frame.instruction_index()];
         frame.inc_instruction_index();
         bc
@@ -815,7 +809,6 @@ impl Runtime {
 
     /// Returns the relative offset from the mnemonics parameters list.
     fn get_relative_offset(params: &[Value]) -> i32 {
-        println!("GetRelativeOffset: {params:?}");
         match params.get(0) {
             Some(Value::Int(v)) => v - 3,
             _ => panic!("Expected parameter to be of type Value::Int"),
@@ -835,15 +828,8 @@ impl Runtime {
             key -= arg_type.size();
             let val = self.pop().unwrap();
             locals.insert(key, val);
-            println!("Arg addr: {key} = {val:?}");
         }
         assert_eq!(key, 0);
-        println!(
-            "method {} stack {:?} locals {:?}",
-            method_name_index,
-            stack.len(),
-            &locals,
-        );
         let pc = ProgramCounter {
             instruction_index: 0,
             method_index: method_name_index,
@@ -945,10 +931,7 @@ impl Runtime {
                     }
                     _ => None,
                 };
-                println!("Frame : {frame:?}");
                 self.frames.push(frame);
-
-                println!("Mnemonic : {mnemonic}");
 
                 Instruction { mnemonic, params }
             }
