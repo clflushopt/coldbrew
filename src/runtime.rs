@@ -184,8 +184,8 @@ pub struct ProgramCounter {
 }
 
 impl ProgramCounter {
-    pub fn new() -> ProgramCounter {
-        ProgramCounter {
+    pub fn new() -> Self {
+        Self {
             instruction_index: 0,
             method_index: 0,
         }
@@ -768,7 +768,7 @@ impl Runtime {
                 OPCode::Return => {
                     self.frames.pop();
                 }
-                // TODO: Add InvokeVirtual/InvokeStatic
+                // Function calls.
                 OPCode::InvokeStatic => {
                     let name_index = match &inst.params {
                         Some(params) => match params[0] {
@@ -781,6 +781,7 @@ impl Runtime {
                     };
                     self.invoke(name_index.try_into().unwrap())
                 }
+                // Currently only supports System.out.println.
                 OPCode::InvokeVirtual => {
                     let value = self.pop();
                     println!("System.out.println : {:?}", value);
