@@ -175,6 +175,21 @@ pub struct Instruction {
     params: Option<Vec<Value>>,
 }
 
+impl Instruction {
+    // Returns instruction mnemonic.
+    pub fn get_mnemonic(&self) -> OPCode {
+        self.mnemonic
+    }
+
+    // Returns a copy of instruction parameters.
+    pub fn get_params(&self) -> Option<Vec<Value>> {
+        match &self.params {
+            Some(vec) => Some(vec.clone()),
+            None => None,
+        }
+    }
+}
+
 /// Program counter for the runtime points to the current instruction
 /// and method we're executing.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]

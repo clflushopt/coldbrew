@@ -16,9 +16,10 @@ const USAGE_CMD: &str = r"
 fn main() {
     // Decide which test files to run.
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        panic!("Unexpected argument use `coldbrew help` to see usage guide.");
-    }
+    assert!(
+        (args.len() >= 2),
+        "Unexpected argument use `coldbrew help` to see usage guide."
+    );
     let folder = match args[1].as_str() {
         "unit" => r"./support/tests/",
         "integration" => r"./support/integration/",
