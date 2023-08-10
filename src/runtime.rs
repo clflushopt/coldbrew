@@ -213,6 +213,14 @@ impl ProgramCounter {
     pub fn get_method_index(&self) -> usize {
         self.method_index
     }
+
+    pub fn inc_instruction_index(&mut self, offset: i32) {
+        if offset > 0 {
+            self.instruction_index += offset as usize
+        } else {
+            self.instruction_index -= offset as usize
+        }
+    }
 }
 
 impl Default for ProgramCounter {

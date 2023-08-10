@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::fmt::Write;
 
 use crate::bytecode::OPCode;
-use crate::runtime::{Instruction, ProgramCounter};
+use crate::runtime::{Instruction, ProgramCounter, Value};
 
 /// Trace recording involves capturing an execution trace of the program in
 /// various places. Each record entry in the trace is a tuple of (pc, inst)
@@ -72,6 +72,56 @@ impl TraceRecorder {
                 _ => pc == self.loop_header,
             },
             None => false,
+        }
+    }
+
+    /// Core recording routine, given the current program counter
+    /// and instruction we are executing decide if we should recording
+    /// branching targets in the case of instructions that have an implicit
+    /// jump such as equality instructions (IfEq, IfNe..).
+    pub fn record(&mut self, pc: ProgramCounter, inst: Instruction) {
+        // Branch flip if the last recorded instruction was a branch.
+        if self.last_instruction_was_branch {
+            // self.flip_branch(pc);
+        }
+        match inst.get_mnemonic() {
+            OPCode::Goto => {
+                let offset = match inst.get_params() {
+                    Some(params) => match params.get(0) {
+                        Some(Value::Int(v)) => *v,
+                        _ => {
+                            panic!("Expected Goto to have integer parameter")
+                        }
+                    },
+                    None => {
+                        panic!("Expected Goto to have at least one parameter")
+                    }
+                };
+                if offset > 0 {
+                    return;
+                } else {
+                    let mut branch_target = pc;
+                    branch_target.inc_instruction_index(offset);
+                    if self.trace_start == branch_target {
+                        self.inner_branch_targets.insert(branch_target);
+                    } else {
+                        self.outer_branch_targets.insert(branch_target);
+                    }
+                }
+            }
+            OPCode::IfNe
+            | OPCode::IfEq
+            | OPCode::IfGt
+            | OPCode::IfICmpGe
+            | OPCode::IfICmpGt
+            | OPCode::IfICmpLt
+            | OPCode::IfICmpLe
+            | OPCode::IfICmpNe
+            | OPCode::IfICmpEq => self.last_instruction_was_branch = true,
+            OPCode::InvokeStatic => {
+                // Check for recursive function calls.
+            }
+            _ => (),
         }
     }
 
