@@ -2,6 +2,7 @@
 use std::collections::HashSet;
 use std::fmt::Write;
 
+use crate::bytecode::OPCode;
 use crate::runtime::{Instruction, ProgramCounter};
 
 /// Trace recording involves capturing an execution trace of the program in
@@ -44,9 +45,34 @@ impl TraceRecorder {
         }
     }
 
-    // Check if we are recording a trace already.
+    /// Check if we are recording a trace already.
     pub const fn is_recording(&self) -> bool {
         self.is_recording
+    }
+
+    /// Check if we finished recording a trace.
+    pub fn is_done_recording(&mut self, pc: ProgramCounter) -> bool {
+        if self.trace.len() == 0 {
+            return false;
+        }
+        match self.trace.get(self.trace.len() - 1) {
+            Some(entry) => match entry.inst.get_mnemonic() {
+                OPCode::Return
+                | OPCode::IReturn
+                | OPCode::LReturn
+                | OPCode::FReturn
+                | OPCode::DReturn => {
+                    if pc.get_method_index() == entry.pc.get_method_index() {
+                        println!("Found recursive return -- abort recording");
+                        self.is_recording = false;
+                        return false;
+                    }
+                    pc == self.loop_header
+                }
+                _ => pc == self.loop_header,
+            },
+            None => false,
+        }
     }
 
     /// Init a trace recording.
@@ -58,13 +84,14 @@ impl TraceRecorder {
         self.last_instruction_was_branch = false;
         self.trace_start = start;
         self.loop_header = loop_header;
+        // Clear existing traces.
         self.trace.clear();
         self.inner_branch_targets.clear();
         self.outer_branch_targets.clear();
     }
 
     /// Return the last recorded trace.
-    pub fn get_recording(&mut self) -> Recording {
+    pub fn recording(&mut self) -> Recording {
         self.is_recording = false;
         Recording {
             start: self.trace_start,
@@ -75,14 +102,25 @@ impl TraceRecorder {
     }
 
     /// Prints the recorded trace to stdout.
-    pub fn debug(&self) {
+    pub fn debug(&self) -> std::fmt::Result {
         let mut s = String::new();
         write!(
             &mut s,
             "---- Trace recorded : ({},{}) ----",
             self.trace_start.get_method_index(),
             self.trace_start.get_instruction_index()
-        );
-        for record in &self.trace {}
+        )?;
+        for record in &self.trace {
+            let inst = &record.inst;
+            write!(&mut s, "{} ", inst.get_mnemonic());
+            for param in &inst.get_params() {
+                write!(&mut s, "{:?} ", param);
+            }
+            write!(&mut s, "\n");
+        }
+        writeln!(&mut s, "---- ------------------ ----");
+
+        println!("{}", s);
+        Ok(())
     }
 }
