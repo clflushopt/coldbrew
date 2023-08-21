@@ -2,7 +2,9 @@
 //! environment and running programs.
 use crate::bytecode::OPCode;
 use crate::jvm::CPInfo;
+use crate::profiler::Profiler;
 use crate::program::{BaseTypeKind, Program};
+use crate::trace;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -176,9 +178,21 @@ pub struct Instruction {
 }
 
 impl Instruction {
+    // Creates a new instruction.
+    pub fn new(mnemonic: OPCode, params: Option<Vec<Value>>) -> Self {
+        Self {
+            mnemonic: mnemonic,
+            params: params,
+        }
+    }
     // Returns instruction mnemonic.
     pub fn get_mnemonic(&self) -> OPCode {
         self.mnemonic
+    }
+
+    // Set instruction mnemonic.
+    pub fn set_mnemonic(&mut self, mnemonic: OPCode) {
+        self.mnemonic = mnemonic
     }
 
     // Returns a copy of instruction parameters.
@@ -215,11 +229,8 @@ impl ProgramCounter {
     }
 
     pub fn inc_instruction_index(&mut self, offset: i32) {
-        if offset > 0 {
-            self.instruction_index += offset as usize
-        } else {
-            self.instruction_index -= offset as usize
-        }
+        self.instruction_index =
+            ((self.instruction_index as i32) + offset) as usize
     }
 }
 
@@ -280,6 +291,8 @@ pub struct Runtime {
     frames: Vec<Frame>,
     // Trace profiling statistics, indexed by the program counter
     // where each trace starts.
+    recorder: trace::TraceRecorder,
+    profiler: Profiler,
     // traces: Vec<Trace>,
     // used to store return values
     return_values: Vec<Value>,
@@ -302,6 +315,8 @@ impl Runtime {
         Self {
             program,
             frames: vec![initial_frame],
+            recorder: trace::TraceRecorder::new(),
+            profiler: Profiler::new(),
             return_values: vec![],
         }
     }
@@ -309,8 +324,22 @@ impl Runtime {
     pub fn run(&mut self) -> Result<()> {
         while !self.frames.is_empty() {
             let inst = self.fetch();
+            let pc = self.frames.last().unwrap().pc;
+            self.profiler.count_entry(&pc);
+
+            if self.profiler.is_hot(&pc) {
+                println!(
+                    "Hot loop found ({}, {})",
+                    pc.get_method_index(),
+                    pc.get_instruction_index()
+                );
+                self.recorder.init(pc, pc);
+            }
+            self.recorder.record(pc, inst.clone());
             self.eval(&inst);
         }
+
+        self.recorder.debug();
         Ok(())
     }
 

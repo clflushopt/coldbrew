@@ -15,14 +15,14 @@ struct RecordEntry {
     inst: Instruction,
 }
 #[derive(Debug, Clone)]
-struct Recording {
+pub struct Recording {
     start: ProgramCounter,
     trace: Vec<RecordEntry>,
     inner_branch_targets: HashSet<ProgramCounter>,
     outer_branch_targets: HashSet<ProgramCounter>,
 }
 
-struct TraceRecorder {
+pub struct TraceRecorder {
     trace_start: ProgramCounter,
     loop_header: ProgramCounter,
     is_recording: bool,
@@ -79,10 +79,10 @@ impl TraceRecorder {
     /// and instruction we are executing decide if we should recording
     /// branching targets in the case of instructions that have an implicit
     /// jump such as equality instructions (IfEq, IfNe..).
-    pub fn record(&mut self, pc: ProgramCounter, inst: Instruction) {
+    pub fn record(&mut self, pc: ProgramCounter, mut inst: Instruction) {
         // Branch flip if the last recorded instruction was a branch.
         if self.last_instruction_was_branch {
-            // self.flip_branch(pc);
+            self.flip_branch(pc);
         }
         match inst.get_mnemonic() {
             OPCode::Goto => {
@@ -120,9 +120,75 @@ impl TraceRecorder {
             | OPCode::IfICmpEq => self.last_instruction_was_branch = true,
             OPCode::InvokeStatic => {
                 // Check for recursive function calls.
+                // Fetch invoked function method index.
+                let method_index = match inst.get_params() {
+                    Some(params) => match params.get(0).unwrap() {
+                        Value::Int(m) => m.to_owned(),
+                        _ => panic!(
+                            "Expected InvokeStatic method index to be i32"
+                        ),
+                    },
+                    _ => panic!("Expected InvokeStatic to have parameters"),
+                };
+                if self.trace_start.get_method_index() == method_index as usize
+                {
+                    self.is_recording = false;
+                    println!("Found recursive call -- abort recording");
+                    return;
+                }
+                ()
             }
+            OPCode::Iconst0
+            | OPCode::Iconst1
+            | OPCode::Iconst2
+            | OPCode::Iconst3
+            | OPCode::Iconst4
+            | OPCode::Iconst5
+            | OPCode::IconstM1
+            | OPCode::Lconst0
+            | OPCode::Lconst1
+            | OPCode::Fconst0
+            | OPCode::Fconst1
+            | OPCode::Fconst2
+            | OPCode::Dconst0
+            | OPCode::Dconst1
+            | OPCode::ILoad0
+            | OPCode::ILoad1
+            | OPCode::ILoad2
+            | OPCode::ILoad3
+            | OPCode::DLoad0
+            | OPCode::DLoad1
+            | OPCode::DLoad2
+            | OPCode::DLoad3
+            | OPCode::FLoad0
+            | OPCode::FLoad1
+            | OPCode::FLoad2
+            | OPCode::FLoad3
+            | OPCode::LLoad0
+            | OPCode::LLoad1
+            | OPCode::LLoad2
+            | OPCode::LLoad3
+            | OPCode::IStore0
+            | OPCode::IStore1
+            | OPCode::IStore2
+            | OPCode::IStore3
+            | OPCode::FStore0
+            | OPCode::FStore1
+            | OPCode::FStore2
+            | OPCode::FStore3
+            | OPCode::DStore0
+            | OPCode::DStore1
+            | OPCode::DStore2
+            | OPCode::DStore3 => {
+                inst = Instruction::new(
+                    OPCode::Breakpoint,
+                    Some(vec![Value::Int(1337)]),
+                );
+            }
+
             _ => (),
         }
+        self.trace.push(RecordEntry { pc: pc, inst: inst })
     }
 
     /// Init a trace recording.
@@ -156,21 +222,73 @@ impl TraceRecorder {
         let mut s = String::new();
         write!(
             &mut s,
-            "---- Trace recorded : ({},{}) ----",
+            "---- Trace recorded : ({},{}) ----\n",
             self.trace_start.get_method_index(),
             self.trace_start.get_instruction_index()
         )?;
         for record in &self.trace {
             let inst = &record.inst;
-            write!(&mut s, "{} ", inst.get_mnemonic());
+            write!(&mut s, "{} ", inst.get_mnemonic())?;
             for param in &inst.get_params() {
-                write!(&mut s, "{:?} ", param);
+                write!(&mut s, "{:?} ", param)?;
             }
-            write!(&mut s, "\n");
+            write!(&mut s, "\n")?;
         }
-        writeln!(&mut s, "---- ------------------ ----");
+        writeln!(&mut s, "---- ------------------ ----")?;
 
         println!("{}", s);
         Ok(())
+    }
+
+    /// Flip branch condition so the jump occurs if the execution doesn't
+    /// follow the trace.
+    fn flip_branch(&mut self, pc: ProgramCounter) {
+        self.last_instruction_was_branch = false;
+        let branch_entry = match self.trace.pop() {
+            Some(record) => record,
+            None => return,
+        };
+        let mut branch_target = branch_entry.pc;
+        let mut offset = match branch_entry.inst.get_params() {
+            Some(params) => match params.get(0).unwrap() {
+                Value::Int(m) => m.to_owned(),
+                _ => panic!("Expected branch target index to be i32"),
+            },
+            _ => panic!("Expected branch target to have parameters"),
+        };
+        branch_target.inc_instruction_index(offset);
+        if branch_target == pc {
+            println!("Flipping branch @ {}", branch_entry.inst.get_mnemonic());
+            offset = 3;
+            branch_target = branch_entry.pc;
+            branch_target.inc_instruction_index(offset);
+            match branch_entry.inst.get_params() {
+                Some(mut params) => match params.get_mut(0) {
+                    Some(Value::Int(m)) => *m = offset,
+                    _ => (),
+                },
+                None => panic!("Expected branch target to have parameters"),
+            }
+            let flipped = match branch_entry.inst.get_mnemonic() {
+                OPCode::IfNe => OPCode::IfEq,
+                OPCode::IfGt => OPCode::IfLe,
+                OPCode::IfICmpGe => OPCode::IfICmpLt,
+                OPCode::IfICmpGt => OPCode::IfICmpLe,
+                OPCode::IfICmpLe => OPCode::IfICmpGt,
+                OPCode::IfICmpNe => OPCode::IfICmpEq,
+                _ => todo!(),
+            };
+            let new_branch_taget =
+                Instruction::new(flipped, branch_entry.inst.get_params());
+            self.trace.push(RecordEntry {
+                pc: branch_entry.pc,
+                inst: new_branch_taget,
+            });
+            if offset < 0 {
+                self.inner_branch_targets.insert(branch_target);
+            } else {
+                self.outer_branch_targets.insert(branch_target);
+            }
+        }
     }
 }
