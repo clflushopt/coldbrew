@@ -29,7 +29,12 @@ On further executions each time we encounter the loop entry we dispatch the JIT
 to run the native code and capture its return value redirecting execution back
 to the interpreter.
 
-## References
+## Acknowledgments
+
+I would like to thank the authors of the TigerShrimp work and for providing
+their implementation. The thesis is exellent overall and is clearly a must
+read to anyone who wishes to understand the overall architecture and behavior
+of tracing JIT compilers.
 
 [^1]: [Java SE7 Spec](https://docs.oracle.com/javase/specs/jvms/se7/html/)
 
@@ -40,11 +45,4 @@ Compiler](https://odr.chalmers.se/server/api/core/bitstreams/87898837-623a-46f0-
 JavaScript](https://pointersgonewild.com/2012/12/08/higgs-my-new-tracing-jit-for-javascript/)
 
 [^4]: [Github/TigerShrimp](https://github.com/TigerShrimp/TracingJITCompiler)
-
-## Acknowledgments
-
-I would like to thank the authors of the TigerShrimp work and for providing
-their implementation. The thesis is exellent overall and is clearly a must
-read to anyone who wishes to understand the overall architecture and behavior
-of tracing JIT compilers.
 
