@@ -180,6 +180,7 @@ impl TraceRecorder {
             | OPCode::DStore1
             | OPCode::DStore2
             | OPCode::DStore3 => {
+                // This is a sentinel value.
                 inst = Instruction::new(
                     OPCode::Breakpoint,
                     Some(vec![Value::Int(1337)]),
@@ -222,9 +223,7 @@ impl TraceRecorder {
         let mut s = String::new();
         write!(
             &mut s,
-            "---- Trace recorded : ({},{}) ----\n",
-            self.trace_start.get_method_index(),
-            self.trace_start.get_instruction_index()
+           "---- ------ TRACE ------ ----\n",
         )?;
         for record in &self.trace {
             let inst = &record.inst;
@@ -234,7 +233,7 @@ impl TraceRecorder {
             }
             write!(&mut s, "\n")?;
         }
-        writeln!(&mut s, "---- ------------------ ----")?;
+        writeln!(&mut s, "---- ------------------- ----")?;
 
         println!("{}", s);
         Ok(())

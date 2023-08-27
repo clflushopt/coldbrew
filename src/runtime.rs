@@ -212,6 +212,12 @@ pub struct ProgramCounter {
     method_index: usize,
 }
 
+impl fmt::Display for ProgramCounter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,"{} @ {}", self.instruction_index, self.method_index)
+    }
+}
+
 impl ProgramCounter {
     pub fn new() -> Self {
         Self {
@@ -328,14 +334,11 @@ impl Runtime {
             self.profiler.count_entry(&pc);
 
             if self.profiler.is_hot(&pc) {
-                println!(
-                    "Hot loop found ({}, {})",
-                    pc.get_method_index(),
-                    pc.get_instruction_index()
-                );
                 self.recorder.init(pc, pc);
             }
-            self.recorder.record(pc, inst.clone());
+            if self.recorder.is_recording() {
+                self.recorder.record(pc, inst.clone());
+            }
             self.eval(&inst);
         }
 

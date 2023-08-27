@@ -18,7 +18,7 @@ pub struct Profiler {
 impl Profiler {
     pub fn new() -> Profiler {
         Profiler {
-            threshold: 0,
+            threshold: 2,
             last_pc: ProgramCounter::new(),
             records: HashMap::new(),
         }
@@ -28,15 +28,21 @@ impl Profiler {
         if pc.get_method_index() == self.last_pc.get_method_index()
             && pc.get_instruction_index() < self.last_pc.get_instruction_index()
         {
-            if let Some(record) = self.records.get_mut(pc) {
-                *record += 1;
+            match self.records.get_mut(pc) {
+                Some(record) => *record += 1,
+                None => {
+                    self.records.insert(*pc, 1);
+                }
             }
         }
         self.last_pc = *pc;
     }
     pub fn count_exit(&mut self, pc: &ProgramCounter) {
-        if let Some(record) = self.records.get_mut(pc) {
-            *record += 1;
+        match self.records.get_mut(pc) {
+            Some(record) => *record += 1,
+            None => {
+                self.records.insert(*pc, 1);
+            }
         }
         self.last_pc = *pc
     }
