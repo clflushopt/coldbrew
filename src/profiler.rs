@@ -53,3 +53,9 @@ impl Profiler {
         false
     }
 }
+
+impl Default for Profiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -1,6 +1,4 @@
 //! JIT compilation engine for coldrew.
-use dynasmrt::aarch64::RX;
-use dynasmrt::Register;
 
 /// The `JitCache` is the core component of the compilation pipeline, given
 /// a recorded trace it prepares and returns a native trace. Unlike traces

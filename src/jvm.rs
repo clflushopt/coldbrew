@@ -680,7 +680,7 @@ fn parse_stack_frame_entry(reader: &mut impl Read, tag: u8) -> StackMapFrame {
             locals: vec![],
             stack: parse_verification_info(reader, 1),
         },
-        248 | 249 | 250 => StackMapFrame {
+        248..=250 => StackMapFrame {
             t: StackMapFrameType::Chop,
             offset_delta: reader.read_u16::<BigEndian>().unwrap(),
             locals: vec![],
@@ -692,7 +692,7 @@ fn parse_stack_frame_entry(reader: &mut impl Read, tag: u8) -> StackMapFrame {
             locals: vec![],
             stack: vec![],
         },
-        252 | 253 | 254 => StackMapFrame {
+        252..=254 => StackMapFrame {
             t: StackMapFrameType::Append,
             offset_delta: reader.read_u16::<BigEndian>().unwrap(),
             locals: parse_verification_info(reader, (tag - 251).into()),

@@ -52,10 +52,10 @@ impl TraceRecorder {
 
     /// Check if we finished recording a trace.
     pub fn is_done_recording(&mut self, pc: ProgramCounter) -> bool {
-        if self.trace.len() == 0 {
+        if self.trace.is_empty() {
             return false;
         }
-        match self.trace.get(self.trace.len() - 1) {
+        match self.trace.last() {
             Some(entry) => match entry.inst.get_mnemonic() {
                 OPCode::Return
                 | OPCode::IReturn
@@ -136,7 +136,6 @@ impl TraceRecorder {
                     println!("Found recursive call -- abort recording");
                     return;
                 }
-                ()
             }
             OPCode::Iconst0
             | OPCode::Iconst1
@@ -189,7 +188,7 @@ impl TraceRecorder {
 
             _ => (),
         }
-        self.trace.push(RecordEntry { pc: pc, inst: inst })
+        self.trace.push(RecordEntry { pc, inst })
     }
 
     /// Init a trace recording.
@@ -259,9 +258,10 @@ impl TraceRecorder {
             branch_target.inc_instruction_index(offset);
             branch_entry.inst.get_params().map_or_else(
                 || panic!("Expected branch target to have parameters"),
-                |mut params| match params.get_mut(0) {
-                    Some(Value::Int(m)) => *m = offset,
-                    _ => (),
+                |mut params| {
+                    if let Some(Value::Int(m)) = params.get_mut(0) {
+                        *m = offset
+                    }
                 },
             );
             let flipped = match branch_entry.inst.get_mnemonic() {
@@ -285,5 +285,11 @@ impl TraceRecorder {
                 self.outer_branch_targets.insert(branch_target);
             }
         }
+    }
+}
+
+impl Default for TraceRecorder {
+    fn default() -> Self {
+        Self::new()
     }
 }

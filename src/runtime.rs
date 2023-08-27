@@ -180,10 +180,7 @@ pub struct Instruction {
 impl Instruction {
     // Creates a new instruction.
     pub fn new(mnemonic: OPCode, params: Option<Vec<Value>>) -> Self {
-        Self {
-            mnemonic: mnemonic,
-            params: params,
-        }
+        Self { mnemonic, params }
     }
     // Returns instruction mnemonic.
     pub fn get_mnemonic(&self) -> OPCode {
@@ -197,10 +194,7 @@ impl Instruction {
 
     // Returns a copy of instruction parameters.
     pub fn get_params(&self) -> Option<Vec<Value>> {
-        match &self.params {
-            Some(vec) => Some(vec.clone()),
-            None => None,
-        }
+        self.params.as_ref().cloned()
     }
 }
 
@@ -1039,38 +1033,38 @@ mod tests {
 
     test_runtime_case!(
         comparison,
-        vec![
+        [
             "support/tests/CompareEq.class",
             "support/tests/CompareNe.class",
             "support/tests/CompareGt.class",
             "support/tests/CompareLt.class",
             "support/tests/CompareGe.class",
-            "support/tests/CompareLe.class",
+            "support/tests/CompareLe.class"
         ],
         Some(Value::Int(1))
     );
 
     test_runtime_case!(
         remainder,
-        vec!["support/tests/Rem.class"],
+        ["support/tests/Rem.class"],
         Some(Value::Int(2))
     );
 
     test_runtime_case!(
         function_calls,
-        vec!["support/tests/FuncCall.class"],
+        ["support/tests/FuncCall.class"],
         Some(Value::Int(500))
     );
 
     test_runtime_case!(
         loops,
-        vec!["support/tests/Loop.class"],
+        ["support/tests/Loop.class"],
         Some(Value::Int(1000))
     );
 
     test_runtime_case!(
         loop_with_function_call,
-        vec!["support/tests/MultiFuncCall.class"],
+        ["support/tests/MultiFuncCall.class"],
         Some(Value::Int(5))
     );
 }
