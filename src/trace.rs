@@ -221,10 +221,7 @@ impl TraceRecorder {
     /// Prints the recorded trace to stdout.
     pub fn debug(&self) -> std::fmt::Result {
         let mut s = String::new();
-        write!(
-            &mut s,
-           "---- ------ TRACE ------ ----\n",
-        )?;
+        write!(&mut s, "---- ------ TRACE ------ ----\n",)?;
         for record in &self.trace {
             let inst = &record.inst;
             write!(&mut s, "{} ", inst.get_mnemonic())?;

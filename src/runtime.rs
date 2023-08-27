@@ -214,7 +214,7 @@ pub struct ProgramCounter {
 
 impl fmt::Display for ProgramCounter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f,"{} @ {}", self.instruction_index, self.method_index)
+        write!(f, "{} @ {}", self.instruction_index, self.method_index)
     }
 }
 
