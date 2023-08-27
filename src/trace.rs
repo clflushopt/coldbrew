@@ -221,18 +221,18 @@ impl TraceRecorder {
     /// Prints the recorded trace to stdout.
     pub fn debug(&self) -> std::fmt::Result {
         let mut s = String::new();
-        write!(&mut s, "---- ------ TRACE ------ ----\n",)?;
+        writeln!(&mut s, "---- ------ TRACE ------ ----")?;
         for record in &self.trace {
             let inst = &record.inst;
             write!(&mut s, "{} ", inst.get_mnemonic())?;
             for param in &inst.get_params() {
-                write!(&mut s, "{:?} ", param)?;
+                write!(&mut s, "{param:?} ")?;
             }
-            write!(&mut s, "\n")?;
+            writeln!(&mut s)?;
         }
         writeln!(&mut s, "---- ------------------- ----")?;
 
-        println!("{}", s);
+        println!("{s}");
         Ok(())
     }
 
@@ -240,31 +240,30 @@ impl TraceRecorder {
     /// follow the trace.
     fn flip_branch(&mut self, pc: ProgramCounter) {
         self.last_instruction_was_branch = false;
-        let branch_entry = match self.trace.pop() {
-            Some(record) => record,
-            None => return,
+        let Some(branch_entry) = self.trace.pop() else {
+            return;
         };
         let mut branch_target = branch_entry.pc;
-        let mut offset = match branch_entry.inst.get_params() {
-            Some(params) => match params.get(0).unwrap() {
+        let mut offset = branch_entry.inst.get_params().map_or_else(
+            || panic!("Expected branch target to have parameters"),
+            |params| match params.get(0).unwrap() {
                 Value::Int(m) => m.to_owned(),
                 _ => panic!("Expected branch target index to be i32"),
             },
-            _ => panic!("Expected branch target to have parameters"),
-        };
+        );
         branch_target.inc_instruction_index(offset);
         if branch_target == pc {
             println!("Flipping branch @ {}", branch_entry.inst.get_mnemonic());
             offset = 3;
             branch_target = branch_entry.pc;
             branch_target.inc_instruction_index(offset);
-            match branch_entry.inst.get_params() {
-                Some(mut params) => match params.get_mut(0) {
+            branch_entry.inst.get_params().map_or_else(
+                || panic!("Expected branch target to have parameters"),
+                |mut params| match params.get_mut(0) {
                     Some(Value::Int(m)) => *m = offset,
                     _ => (),
                 },
-                None => panic!("Expected branch target to have parameters"),
-            }
+            );
             let flipped = match branch_entry.inst.get_mnemonic() {
                 OPCode::IfNe => OPCode::IfEq,
                 OPCode::IfGt => OPCode::IfLe,

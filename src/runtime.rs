@@ -342,7 +342,7 @@ impl Runtime {
             self.eval(&inst);
         }
 
-        self.recorder.debug();
+        let _ = self.recorder.debug();
         Ok(())
     }
 
@@ -581,7 +581,9 @@ impl Runtime {
                 }
                 // Control flow operations.
                 OPCode::IfEq => {
-                    let Some(Value::Int(value)) = self.pop() else { panic!("expected value to be integer") };
+                    let Some(Value::Int(value)) = self.pop() else {
+                        panic!("expected value to be integer")
+                    };
 
                     let relative_offset = inst.params.as_ref().map_or_else(
                         || {
@@ -596,7 +598,9 @@ impl Runtime {
                     }
                 }
                 OPCode::IfNe => {
-                    let Some(Value::Int(value)) = self.pop() else { panic!("expected value to be integer") };
+                    let Some(Value::Int(value)) = self.pop() else {
+                        panic!("expected value to be integer")
+                    };
 
                     let relative_offset = inst.params.as_ref().map_or_else(
                         || {
@@ -611,7 +615,9 @@ impl Runtime {
                     }
                 }
                 OPCode::IfLt => {
-                    let Some(Value::Int(value)) = self.pop() else { panic!("expected value to be integer") };
+                    let Some(Value::Int(value)) = self.pop() else {
+                        panic!("expected value to be integer")
+                    };
 
                     let relative_offset = inst.params.as_ref().map_or_else(
                         || {
