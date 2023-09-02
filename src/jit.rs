@@ -44,15 +44,18 @@ mod tests {
     ) -> dynasmrt::AssemblyOffset {
         let mut builder = dynasmrt::aarch64::Assembler::new();
         dynasm!(builder.as_mut().expect("expected builder to be mutable")
-            ; sub     sp, sp, #16
-            ; str     w0, [sp, #12]
-            ; str     w1, [sp, #8]
-            ; ldr w8, [sp, #12]
-            ; ldr w9, [sp, #8]
-            ; add w8, w8, w9
-            ; str w8, [sp, #4]
-            ; ldr w0, [sp, #4]
-            ; add sp, sp, #16
+            // Prologue call stack preparation <> add(sp...)
+            ; sub     sp, sp, #32
+            ; str     x0, [sp, #24]
+            ; str     x1, [sp, #16]
+            // int c = a + b;
+            ; ldr x8, [sp, #24]
+            ; ldr x9, [sp, #16]
+            ; add x8, x8, x9
+            ; str w8, [sp, #12]
+            // Epilogue call stack cleanup return c
+            ; ldr w0, [sp, #12]
+            ; add sp, sp, #32
             ; ret
         );
         let _offset = builder
