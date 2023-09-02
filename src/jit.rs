@@ -16,3 +16,73 @@ impl JitCache {
     // for execution.
     fn compile() {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dynasmrt::dynasm;
+    use dynasmrt::{DynasmApi, DynasmLabelApi, ExecutableBuffer};
+
+    fn build_test_fn_x86(
+        buffer: &mut ExecutableBuffer,
+    ) -> dynasmrt::AssemblyOffset {
+        let mut builder = dynasmrt::x64::Assembler::new();
+
+        dynasm!(builder.as_mut().expect("REASON")
+            ; movz x0, 42
+            ; movz x1, 13//, lsl 16
+            ; add x0, x0, x1
+            ; ret
+        );
+        let _offset = builder.as_ref().expect("REASON").offset();
+        *buffer = builder.expect("REASON").finalize().unwrap();
+        dynasmrt::AssemblyOffset(0)
+    }
+
+    fn build_test_fn_aarch64(
+        buffer: &mut ExecutableBuffer,
+    ) -> dynasmrt::AssemblyOffset {
+        let mut builder = dynasmrt::aarch64::Assembler::new();
+        dynasm!(builder.as_mut().expect("expected builder to be mutable")
+            ; sub     sp, sp, #16
+            ; str     w0, [sp, #12]
+            ; str     w1, [sp, #8]
+            ; ldr w8, [sp, #12]
+            ; ldr w9, [sp, #8]
+            ; add w8, w8, w9
+            ; str w8, [sp, #4]
+            ; ldr w0, [sp, #4]
+            ; add sp, sp, #16
+            ; ret
+        );
+        let _offset = builder
+            .as_ref()
+            .expect("expected valid reference to builder")
+            .offset();
+        *buffer = builder.expect("expected builder").finalize().unwrap();
+        dynasmrt::AssemblyOffset(0)
+    }
+
+    #[test]
+    fn test_dynasm_buffer() {
+        // Create a buffer to hold the generated machine code
+        let mut buffer = ExecutableBuffer::new(4096).unwrap();
+
+        // Build the function using Dynasm
+        let code_offset = build_test_fn_x86(&mut buffer);
+
+        let code_offset_aarch64 = build_test_fn_aarch64(&mut buffer);
+
+        // Execute the generated machine code
+        let add_fn: extern "C" fn(u64, u64) -> u64 =
+            unsafe { std::mem::transmute(buffer.ptr(code_offset)) };
+
+        let add_fn_aarch64: extern "C" fn(u64, u64) -> u64 =
+            unsafe { std::mem::transmute(buffer.ptr(code_offset_aarch64)) };
+        // Call the generated function and print the result
+        let result = add_fn(42, 13);
+        let result_aarch64 = add_fn_aarch64(42, 13);
+        assert_eq!(result, 55);
+        assert_eq!(result_aarch64, 55);
+    }
+}
