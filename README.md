@@ -36,8 +36,6 @@ their implementation. The thesis is an exellent introduction to Tracing JITs
 and is a must read to anyone who wishes to understand the overall architecture
 and details of tracing JIT interpreters.
 
-## References
-
 [^1]: [Java SE7 Spec](https://docs.oracle.com/javase/specs/jvms/se7/html/)
 
 [^2]: [TigerShrimp: An Understandable Tracing JIT
