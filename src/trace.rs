@@ -22,7 +22,7 @@ pub struct Recording {
     outer_branch_targets: HashSet<ProgramCounter>,
 }
 
-pub struct TraceRecorder {
+pub struct Recorder {
     trace_start: ProgramCounter,
     loop_header: ProgramCounter,
     is_recording: bool,
@@ -32,7 +32,7 @@ pub struct TraceRecorder {
     outer_branch_targets: HashSet<ProgramCounter>,
 }
 
-impl TraceRecorder {
+impl Recorder {
     pub fn new() -> Self {
         Self {
             trace_start: ProgramCounter::new(),
@@ -78,7 +78,7 @@ impl TraceRecorder {
     /// Core recording routine, given the current program counter
     /// and instruction we are executing decide if we should recording
     /// branching targets in the case of instructions that have an implicit
-    /// jump such as equality instructions (IfEq, IfNe..).
+    /// jump such as equality instructions like `IfEq` and `IfNe`.
     pub fn record(&mut self, pc: ProgramCounter, mut inst: Instruction) {
         // Branch flip if the last recorded instruction was a branch.
         if self.last_instruction_was_branch {
@@ -179,16 +179,69 @@ impl TraceRecorder {
             | OPCode::DStore1
             | OPCode::DStore2
             | OPCode::DStore3 => {
-                // This is a sentinel value.
-                inst = Instruction::new(
-                    OPCode::Breakpoint,
-                    Some(vec![Value::Int(1337)]),
-                );
+                if let Some(value) = Self::get_params(inst.get_mnemonic()) {
+                    inst = Instruction::new(
+                        inst.get_mnemonic(),
+                        Some(vec![value]),
+                    );
+                }
             }
-
             _ => (),
         }
-        self.trace.push(RecordEntry { pc, inst })
+        self.trace.push(RecordEntry { pc, inst });
+    }
+
+    /// Returns the `jvm::Value` from a given mnemonic.
+    const fn get_params(opcode: OPCode) -> Option<Value> {
+        match opcode {
+            OPCode::ILoad0
+            | OPCode::FLoad0
+            | OPCode::LLoad0
+            | OPCode::DLoad0
+            | OPCode::IStore0
+            | OPCode::FStore0
+            | OPCode::LStore0
+            | OPCode::DStore0
+            | OPCode::Iconst0 => Some(Value::Int(0)),
+            OPCode::ILoad1
+            | OPCode::FLoad1
+            | OPCode::LLoad1
+            | OPCode::DLoad1
+            | OPCode::IStore1
+            | OPCode::FStore1
+            | OPCode::LStore1
+            | OPCode::DStore1
+            | OPCode::Iconst1 => Some(Value::Int(1)),
+            OPCode::ILoad2
+            | OPCode::FLoad2
+            | OPCode::LLoad2
+            | OPCode::DLoad2
+            | OPCode::IStore2
+            | OPCode::FStore2
+            | OPCode::LStore2
+            | OPCode::DStore2
+            | OPCode::Iconst2 => Some(Value::Int(2)),
+            OPCode::ILoad3
+            | OPCode::FLoad3
+            | OPCode::LLoad3
+            | OPCode::DLoad3
+            | OPCode::IStore3
+            | OPCode::FStore3
+            | OPCode::LStore3
+            | OPCode::DStore3
+            | OPCode::Iconst3 => Some(Value::Int(3)),
+            OPCode::Iconst4 => Some(Value::Int(4)),
+            OPCode::Iconst5 => Some(Value::Int(5)),
+            OPCode::IconstM1 => Some(Value::Int(-1)),
+            OPCode::Fconst0 => Some(Value::Float(0.)),
+            OPCode::Fconst1 => Some(Value::Float(1.)),
+            OPCode::Fconst2 => Some(Value::Float(2.)),
+            OPCode::Lconst0 => Some(Value::Long(0)),
+            OPCode::Lconst1 => Some(Value::Long(1)),
+            OPCode::Dconst0 => Some(Value::Double(0.)),
+            OPCode::Dconst1 => Some(Value::Double(1.)),
+            _ => None,
+        }
     }
 
     /// Init a trace recording.
@@ -218,6 +271,9 @@ impl TraceRecorder {
     }
 
     /// Prints the recorded trace to stdout.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying calls to `write!` fail.
     pub fn debug(&self) -> std::fmt::Result {
         let mut s = String::new();
         writeln!(&mut s, "---- ------ TRACE ------ ----")?;
@@ -260,7 +316,7 @@ impl TraceRecorder {
                 || panic!("Expected branch target to have parameters"),
                 |mut params| {
                     if let Some(Value::Int(m)) = params.get_mut(0) {
-                        *m = offset
+                        *m = offset;
                     }
                 },
             );
@@ -288,7 +344,7 @@ impl TraceRecorder {
     }
 }
 
-impl Default for TraceRecorder {
+impl Default for Recorder {
     fn default() -> Self {
         Self::new()
     }

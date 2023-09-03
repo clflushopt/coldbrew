@@ -291,7 +291,7 @@ pub struct Runtime {
     frames: Vec<Frame>,
     // Trace profiling statistics, indexed by the program counter
     // where each trace starts.
-    recorder: trace::TraceRecorder,
+    recorder: trace::Recorder,
     profiler: Profiler,
     // traces: Vec<Trace>,
     // used to store return values
@@ -315,7 +315,7 @@ impl Runtime {
         Self {
             program,
             frames: vec![initial_frame],
-            recorder: trace::TraceRecorder::new(),
+            recorder: trace::Recorder::new(),
             profiler: Profiler::new(),
             return_values: vec![],
         }
@@ -570,7 +570,7 @@ impl Runtime {
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::Int(Value::compare(&a, &b)));
+                        self.push(Value::Int(Value::compare(&a, &b)))
                     }
                 }
                 // Control flow operations.
@@ -605,7 +605,7 @@ impl Runtime {
                         |params| Self::get_relative_offset(params),
                     );
                     if value != 0 {
-                        self.jump(relative_offset);
+                        self.jump(relative_offset)
                     }
                 }
                 OPCode::IfLt => {
@@ -623,12 +623,12 @@ impl Runtime {
                     );
 
                     if value < 0 {
-                        self.jump(relative_offset);
+                        self.jump(relative_offset)
                     }
                 }
                 OPCode::IfGt => {
                     let Some(Value::Int(value)) = self.pop() else {
-                        panic!("expected value to be integer");
+                        panic!("expected value to be integer")
                     };
 
                     let relative_offset = inst.params.as_ref().map_or_else(
@@ -641,7 +641,7 @@ impl Runtime {
                     );
 
                     if value > 0 {
-                        self.jump(relative_offset);
+                        self.jump(relative_offset)
                     }
                 }
                 OPCode::IfLe => {
@@ -659,7 +659,7 @@ impl Runtime {
                     );
 
                     if value <= 0 {
-                        self.jump(relative_offset);
+                        self.jump(relative_offset)
                     }
                 }
                 OPCode::IfGe => {
@@ -677,7 +677,7 @@ impl Runtime {
                     );
 
                     if value >= 0 {
-                        self.jump(relative_offset);
+                        self.jump(relative_offset)
                     }
                 }
                 OPCode::IfICmpEq => {
@@ -695,7 +695,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a == b {
-                            self.jump(relative_offset);
+                            self.jump(relative_offset)
                         }
                     }
                 }
@@ -714,7 +714,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a != b {
-                            self.jump(relative_offset);
+                            self.jump(relative_offset)
                         }
                     }
                 }
@@ -733,7 +733,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a < b {
-                            self.jump(relative_offset);
+                            self.jump(relative_offset)
                         }
                     }
                 }
@@ -752,7 +752,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a > b {
-                            self.jump(relative_offset);
+                            self.jump(relative_offset)
                         }
                     }
                 }
@@ -771,7 +771,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a <= b {
-                            self.jump(relative_offset);
+                            self.jump(relative_offset)
                         }
                     }
                 }
@@ -790,7 +790,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         if a >= b {
-                            self.jump(relative_offset);
+                            self.jump(relative_offset)
                         }
                     }
                 }
@@ -805,7 +805,7 @@ impl Runtime {
                         |params| Self::get_relative_offset(params),
                     );
 
-                    self.jump(relative_offset);
+                    self.jump(relative_offset)
                 }
                 // Return with value.
                 OPCode::IReturn
@@ -816,7 +816,7 @@ impl Runtime {
                         let value = frame.stack.pop().unwrap();
                         // This is for debugging purposes.
                         self.return_values.push(value);
-                        self.push(value);
+                        self.push(value)
                     }
                 }
                 // Void return
@@ -826,20 +826,20 @@ impl Runtime {
                 // Function calls.
                 OPCode::InvokeStatic => {
                     let name_index = match &inst.params {
-                        Some(params) => match params[0] {
-                            Value::Int(index) => index,
+                        Some(params) => match params.get(0) {
+                            Some(Value::Int(index)) => index,
                             _ => panic!(
                                 "InvokeStatic expected integer parameter"
                             ),
                         },
                         _ => panic!("InvokeStatic expected parameters"),
                     };
-                    self.invoke(name_index.try_into().unwrap())
+                    self.invoke(*name_index as usize)
                 }
                 // Currently only supports System.out.println.
                 OPCode::InvokeVirtual => {
                     let value = self.pop();
-                    println!("System.out.println : {:?}", value);
+                    println!("System.out.println : {value:?}");
                 }
                 OPCode::GetStatic | OPCode::NOP | OPCode::Dup => (),
                 _ => todo!(),
@@ -891,7 +891,7 @@ impl Runtime {
             method_index: method_name_index,
         };
         let frame = Frame { pc, stack, locals };
-        self.frames.push(frame)
+        self.frames.push(frame);
     }
 
     /// Returns the next instruction to execute.
