@@ -1,10 +1,37 @@
-//! JIT compilation engine for coldrew.
+//! JIT compiler for coldrew.
 use crate::trace::Recording;
+use dynasmrt::dynasm;
 
-/// The `JitCache` is the core component of the compilation pipeline, given
-/// a recorded trace it prepares and returns a native trace. Unlike traces
-/// recorded by the `TraceRecoder` native traces are raw assembly opcodes
-/// that can be executed by the `dynasmrt` runtime.
+/// Macros that are reusable when building traces.
+///
+/// aarch64 function prologue.
+macro_rules! prologue {
+    ($ops:ident) => {{
+        let start = $ops.offset();
+        dynasm!($ops
+            ; str x30, [sp, #-16]!
+            ; stp x0, x1, [sp, #-16]!
+            ; stp x2, x3, [sp, #-16]!
+        );
+        start
+    }};
+}
+
+/// aarch64 function epilogue.
+macro_rules! epilogue {
+    ($ops:ident, $e:expr) => {dynasm!($ops
+        // Load return value that we assume
+        // is the third stack variable.
+        ; ldr w0, [sp, #12]
+        // Increment stack pointer to go back to where we were
+        // before the function call.
+        ; add sp, sp, #32
+        ; ldr x30, [sp], #16
+        ; ret
+    );};
+}
+
+/// Cache for managing JIT compiled traces.
 pub struct JitCache {}
 
 impl Default for JitCache {
@@ -28,6 +55,24 @@ impl JitCache {
 mod tests {
     use dynasmrt::dynasm;
     use dynasmrt::{DynasmApi, ExecutableBuffer};
+
+    fn prebuilt_test_fn_aarch64(
+        buffer: &mut ExecutableBuffer,
+    ) -> dynasmrt::AssemblyOffset {
+        let mut ops = dynasmrt::aarch64::Assembler::new().unwrap();
+
+        let start = prologue!(ops);
+        dynasm!(ops
+            // int c = a + b;
+            ; ldr x8, [sp, #24]
+            ; ldr x9, [sp, #16]
+            ; add x8, x8, x9
+            ; str w8, [sp, #12]
+        );
+        epilogue!(ops, 0);
+        *buffer = ops.finalize().unwrap();
+        start
+    }
 
     fn build_test_fn_x86(
         buffer: &mut ExecutableBuffer,
@@ -82,16 +127,25 @@ mod tests {
 
         let code_offset_aarch64 = build_test_fn_aarch64(&mut buffer);
 
+        let prebuilt_code_offset_aarch64 =
+            prebuilt_test_fn_aarch64(&mut buffer);
+
         // Execute the generated machine code
         let add_fn: extern "C" fn(u64, u64) -> u64 =
             unsafe { std::mem::transmute(buffer.ptr(code_offset)) };
 
         let add_fn_aarch64: extern "C" fn(u64, u64) -> u64 =
             unsafe { std::mem::transmute(buffer.ptr(code_offset_aarch64)) };
+
+        let prebuilt_add_fn_aarch64: extern "C" fn(u64, u64) -> u64 = unsafe {
+            std::mem::transmute(buffer.ptr(prebuilt_code_offset_aarch64))
+        };
         // Call the generated function and print the result
         let result = add_fn(42, 13);
         let result_aarch64 = add_fn_aarch64(42, 13);
+        let result_prebuilt_aarch64 = prebuilt_add_fn_aarch64(42, 13);
         assert_eq!(result, 55);
         assert_eq!(result_aarch64, 55);
+        assert_eq!(result_prebuilt_aarch64, 55);
     }
 }
