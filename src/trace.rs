@@ -10,14 +10,25 @@ use crate::runtime::{Instruction, ProgramCounter, Value};
 /// where pc is the program counter (position of the entry in the bytecode)
 /// and inst is the instruction executed there.
 #[derive(Debug, Clone)]
-struct RecordEntry {
+pub struct RecordEntry {
     pc: ProgramCounter,
     inst: Instruction,
 }
+
+impl RecordEntry {
+    pub fn instruction(&self) -> Instruction {
+        self.inst.clone()
+    }
+
+    pub fn pc(&self) -> ProgramCounter {
+        self.pc
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Recording {
     start: ProgramCounter,
-    trace: Vec<RecordEntry>,
+    pub trace: Vec<RecordEntry>,
     inner_branch_targets: HashSet<ProgramCounter>,
     outer_branch_targets: HashSet<ProgramCounter>,
 }

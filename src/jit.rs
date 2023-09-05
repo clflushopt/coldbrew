@@ -1,9 +1,57 @@
 //! JIT compiler for coldrew.
+use crate::bytecode::OPCode;
 use crate::trace::Recording;
 use dynasmrt::dynasm;
+use dynasmrt::AssemblyOffset;
+use dynasmrt::DynasmApi;
 
-/// Macros that are reusable when building traces.
-///
+/// aarch64 registers, mainly used to keep track of available
+/// and used registers during compilation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Register {
+    // Arguments and return values.
+    X0 = 0,
+    X1 = 1,
+    X2 = 2,
+    X3 = 3,
+    X4 = 4,
+    X5 = 5,
+    X6 = 6,
+    X7 = 7,
+    // Indirect result.
+    X8 = 8,
+    // Temporary.
+    X9 = 9,
+    X10 = 10,
+    X11 = 11,
+    X12 = 12,
+    X13 = 13,
+    X14 = 14,
+    X15 = 15,
+    // Intra-procedure call temporaries.
+    X16 = 16,
+    X17 = 17,
+    // Platform defined usage.
+    X18 = 18,
+    // Temporary (must be preserved).
+    X19 = 19,
+    X20 = 20,
+    X21 = 21,
+    X22 = 22,
+    X23 = 23,
+    X24 = 24,
+    X25 = 25,
+    X26 = 26,
+    X27 = 27,
+    X28 = 28,
+    // Frame pointer (must be preserved).
+    X29 = 29,
+    // Return address.
+    X30 = 30,
+    // Stack pointer
+    X31 = 31,
+}
+
 /// aarch64 function prologue.
 macro_rules! prologue {
     ($ops:ident) => {{
@@ -19,7 +67,7 @@ macro_rules! prologue {
 
 /// aarch64 function epilogue.
 macro_rules! epilogue {
-    ($ops:ident, $e:expr) => {dynasm!($ops
+    ($ops:ident) => {dynasm!($ops
         // Load return value that we assume
         // is the third stack variable.
         ; ldr w0, [sp, #12]
@@ -30,7 +78,6 @@ macro_rules! epilogue {
         ; ret
     );};
 }
-
 /// Cache for managing JIT compiled traces.
 pub struct JitCache {}
 
@@ -48,11 +95,27 @@ impl JitCache {
 
     // Compile the trace given as argument and prepare a native trace
     // for execution.
-    fn compile(_recording: &Recording) {}
+    fn compile(recording: &Recording) -> AssemblyOffset {
+        let mut ops = dynasmrt::aarch64::Assembler::new().unwrap();
+        // Prologue for dynamically compiled code.
+        let offset = prologue!(ops);
+        // Trace compilation
+        for trace in &recording.trace {
+            match trace.instruction().get_mnemonic() {
+                _ => (),
+            }
+        }
+
+        // Epilogue for dynamically compiled code.
+        epilogue!(ops);
+
+        offset
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use dynasmrt::dynasm;
     use dynasmrt::{DynasmApi, ExecutableBuffer};
 
@@ -62,14 +125,15 @@ mod tests {
         let mut ops = dynasmrt::aarch64::Assembler::new().unwrap();
 
         let start = prologue!(ops);
+        let target = Register::X8 as u32;
         dynasm!(ops
             // int c = a + b;
-            ; ldr x8, [sp, #24]
-            ; ldr x9, [sp, #16]
-            ; add x8, x8, x9
+            ; ldr X(target), [sp, #24]
+            ; ldr X(9), [sp, #16]
+            ; add X(8), x8, x9
             ; str w8, [sp, #12]
         );
-        epilogue!(ops, 0);
+        epilogue!(ops);
         *buffer = ops.finalize().unwrap();
         start
     }
