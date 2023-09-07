@@ -1,6 +1,9 @@
 //! JIT compiler for coldrew.
+use std::collections::VecDeque;
+
 use crate::bytecode::OPCode;
 use crate::trace::Recording;
+use dynasmrt::aarch64::Assembler;
 use dynasmrt::dynasm;
 use dynasmrt::AssemblyOffset;
 use dynasmrt::DynasmApi;
@@ -10,46 +13,46 @@ use dynasmrt::DynasmApi;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Register {
     // Arguments and return values.
-    X0 = 0,
-    X1 = 1,
-    X2 = 2,
-    X3 = 3,
-    X4 = 4,
-    X5 = 5,
-    X6 = 6,
-    X7 = 7,
+    X0 = 0x0,
+    X1 = 0x1,
+    X2 = 0x2,
+    X3 = 0x3,
+    X4 = 0x4,
+    X5 = 0x5,
+    X6 = 0x6,
+    X7 = 0x7,
     // Indirect result.
-    X8 = 8,
+    X8 = 0x8,
     // Temporary.
-    X9 = 9,
-    X10 = 10,
-    X11 = 11,
-    X12 = 12,
-    X13 = 13,
-    X14 = 14,
-    X15 = 15,
+    X9 = 0x9,
+    X10 = 0x10,
+    X11 = 0x11,
+    X12 = 0x12,
+    X13 = 0x13,
+    X14 = 0x14,
+    X15 = 0x15,
     // Intra-procedure call temporaries.
-    X16 = 16,
-    X17 = 17,
+    X16 = 0x16,
+    X17 = 0x17,
     // Platform defined usage.
-    X18 = 18,
+    X18 = 0x18,
     // Temporary (must be preserved).
-    X19 = 19,
-    X20 = 20,
-    X21 = 21,
-    X22 = 22,
-    X23 = 23,
-    X24 = 24,
-    X25 = 25,
-    X26 = 26,
-    X27 = 27,
-    X28 = 28,
+    X19 = 0x19,
+    X20 = 0x20,
+    X21 = 0x21,
+    X22 = 0x22,
+    X23 = 0x23,
+    X24 = 0x24,
+    X25 = 0x25,
+    X26 = 0x26,
+    X27 = 0x27,
+    X28 = 0x28,
     // Frame pointer (must be preserved).
-    X29 = 29,
+    X29 = 0x29,
     // Return address.
-    X30 = 30,
+    X30 = 0x30,
     // Stack pointer
-    X31 = 31,
+    X31 = 0x31,
 }
 
 /// aarch64 function prologue.
@@ -78,8 +81,11 @@ macro_rules! epilogue {
         ; ret
     );};
 }
-/// Cache for managing JIT compiled traces.
-pub struct JitCache {}
+/// `JitCache` is responsible for compiling and caching recorded traces.
+pub struct JitCache {
+    // Internal cache of available registers.
+    registers: VecDeque<Register>,
+}
 
 impl Default for JitCache {
     fn default() -> Self {
@@ -90,7 +96,9 @@ impl Default for JitCache {
 impl JitCache {
     // Create a new JIT compilation cache.
     pub fn new() -> Self {
-        JitCache {}
+        JitCache {
+            registers: VecDeque::new(),
+        }
     }
 
     // Compile the trace given as argument and prepare a native trace
@@ -111,10 +119,20 @@ impl JitCache {
 
         offset
     }
+
+    // Emit an arithmetic operation.
+    fn emit_arithmetic(ops: &mut Assembler) {
+        dynasm!(ops
+            ; add X(8), X(8), X(9)
+        );
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::f32::consts::E;
+    use std::os::raw::c_void;
+
     use super::*;
     use dynasmrt::dynasm;
     use dynasmrt::{DynasmApi, ExecutableBuffer};
@@ -204,6 +222,7 @@ mod tests {
         let prebuilt_add_fn_aarch64: extern "C" fn(u64, u64) -> u64 = unsafe {
             std::mem::transmute(buffer.ptr(prebuilt_code_offset_aarch64))
         };
+
         // Call the generated function and print the result
         let result = add_fn(42, 13);
         let result_aarch64 = add_fn_aarch64(42, 13);
