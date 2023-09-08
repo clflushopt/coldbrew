@@ -2,6 +2,7 @@
 use std::collections::VecDeque;
 
 use crate::bytecode::OPCode;
+use crate::runtime::ProgramCounter;
 use crate::trace::Recording;
 use dynasmrt::aarch64::Assembler;
 use dynasmrt::dynasm;
@@ -51,8 +52,20 @@ enum Register {
     X29 = 0x29,
     // Return address.
     X30 = 0x30,
-    // Stack pointer
+    // Zero register.
     X31 = 0x31,
+}
+
+/// Operands.
+enum Operand {
+    // Register operands.
+    Register(Register),
+    // Immediate operands.
+    Immediate(i32),
+    // Memory operands.
+    Memory(Register, i32),
+    // Label operands.
+    Label(ProgramCounter),
 }
 
 /// aarch64 function prologue.
@@ -81,10 +94,12 @@ macro_rules! epilogue {
         ; ret
     );};
 }
-/// `JitCache` is responsible for compiling and caching recorded traces.
+/// `JitCache` is responsible for compiling and caching recorded native traces.
 pub struct JitCache {
     // Internal cache of available registers.
     registers: VecDeque<Register>,
+    // Operand stack.
+    operands: Vec<Operand>,
 }
 
 impl Default for JitCache {
@@ -98,6 +113,7 @@ impl JitCache {
     pub fn new() -> Self {
         JitCache {
             registers: VecDeque::new(),
+            operands: Vec::new(),
         }
     }
 
@@ -121,10 +137,35 @@ impl JitCache {
     }
 
     // Emit an arithmetic operation.
-    fn emit_arithmetic(ops: &mut Assembler) {
+    fn emit_arithmetic(&mut self, ops: &mut Assembler) {
+        let op2 = match self.operands.pop() {
+            Some(operand) => operand,
+            None => panic!("expected operand found None"),
+        };
+        let op1 = match self.operands.pop() {
+            Some(operand) => operand,
+            None => panic!("expected operand found None"),
+        };
+        let dst = match op1 {
+            Operand::Register(_) => op1,
+            _ => {
+                let _dst = self.first_available_register();
+                // Generate a mov dst, op1
+                _dst
+            }
+        };
+
+        if let Operand::Register(reg) = op2 {
+            self.registers.push_back(reg)
+        }
         dynasm!(ops
             ; add X(8), X(8), X(9)
         );
+    }
+
+    // Returns the first available register.
+    fn first_available_register(&mut self) -> Operand {
+        Operand::Register(Register::X0)
     }
 }
 
@@ -187,7 +228,7 @@ mod tests {
             ; add x8, x8, x9
             ; str w8, [sp, #12]
             // Epilogue call stack cleanup return c
-            ; ldr w0, [sp, #12]
+            ; ldr W(0), [sp, #12]
             ; add sp, sp, #32
             ; ret
         );
