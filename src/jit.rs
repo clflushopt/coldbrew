@@ -1,7 +1,7 @@
 //! JIT compiler for coldrew.
 use std::collections::VecDeque;
 
-use crate::bytecode::OPCode;
+
 use crate::runtime::ProgramCounter;
 use crate::trace::Recording;
 use dynasmrt::aarch64::Assembler;
@@ -183,7 +183,7 @@ impl JitCache {
             Some(operand) => operand,
             None => panic!("expected operand found None"),
         };
-        let dst = match op1 {
+        let _dst = match op1 {
             Operand::Register(_) => op1,
             _ => {
                 let _dst = self.first_available_register();
@@ -209,8 +209,8 @@ impl JitCache {
 
 #[cfg(test)]
 mod tests {
-    use std::f32::consts::E;
-    use std::os::raw::c_void;
+
+
 
     use super::*;
     use dynasmrt::dynasm;
