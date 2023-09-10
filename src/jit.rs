@@ -9,7 +9,7 @@ use dynasmrt::dynasm;
 use dynasmrt::AssemblyOffset;
 use dynasmrt::DynasmApi;
 
-/// aarch64 registers, mainly used to keep track of available
+/// ARM64 (aarch64) registers, mainly used to keep track of available
 /// and used registers during compilation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Register {
@@ -57,12 +57,14 @@ enum Register {
 }
 
 /// Operands.
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Operand {
     // Register operands.
     Register(Register),
     // Immediate operands.
     Immediate(i32),
-    // Memory operands.
+    // Memory operands represent memory addresses as a pair of base register
+    // and immediate offset often seen as `[bp, offset]`.
     Memory(Register, i32),
     // Label operands.
     Label(ProgramCounter),
@@ -136,7 +138,42 @@ impl JitCache {
         offset
     }
 
-    // Emit an arithmetic operation.
+    // Emit a move operation, this includes all data movement operations
+    // register to register and immediate to register.
+    // For memory accesses we follow the aarch64 story of generating all
+    // necessary stores and loads.
+    fn emit_mov(&mut self, ops: &mut Assembler, dst: &Operand, src: &Operand) {
+        // Early return if the move is considered useless.
+        if dst == src {
+            return;
+        }
+        // If the destination operand is a register and the source operand is
+        // either a register or an immediate we emit `mov dst, src`.
+        match (dst, src) {
+            // Direct register copies.
+            (Operand::Register(dst), Operand::Register(src)) => {
+                dynasm!(ops
+                    ; mov X(*dst as u32), X(*src as u32)
+                );
+            }
+            // Direct immediate copies.
+            (Operand::Register(dst), Operand::Immediate(imm)) => {
+                dynasm!(ops
+                    ; mov X(*dst as u32), #*imm as u64
+                );
+            }
+            // Indirect memory load into a destination register.
+            (Operand::Register(dst), Operand::Memory(base, offset)) => {
+                dynasm!(ops
+                    ; str X(*dst as u32), [X(*base as u32), *offset as u32]
+                );
+            }
+            _ => todo!(),
+        }
+    }
+
+    // Emit an arithmetic operation, covers all simple instructions such as
+    // `add`, `mul` and `sub`.
     fn emit_arithmetic(&mut self, ops: &mut Assembler) {
         let op2 = match self.operands.pop() {
             Some(operand) => operand,
@@ -151,6 +188,7 @@ impl JitCache {
             _ => {
                 let _dst = self.first_available_register();
                 // Generate a mov dst, op1
+                self.emit_mov(ops, &_dst, &op1);
                 _dst
             }
         };
@@ -185,10 +223,11 @@ mod tests {
 
         let start = prologue!(ops);
         let target = Register::X8 as u32;
+        let addr = 16;
         dynasm!(ops
             // int c = a + b;
             ; ldr X(target), [sp, #24]
-            ; ldr X(9), [sp, #16]
+            ; ldr X(9), [sp, #addr]
             ; add X(8), x8, x9
             ; str w8, [sp, #12]
         );
