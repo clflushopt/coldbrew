@@ -5,7 +5,7 @@ use coldbrew::jvm::{read_class_file, JVMParser};
 use coldbrew::program::Program;
 use coldbrew::runtime::Runtime;
 
-const USAGE_CMD: &str = r"
+const USAGE_CMD: &str = "
     Coldbrew Tracing JIT usage guide :
 
     Run `coldbrew unit` to run small test programs.
@@ -21,8 +21,8 @@ fn main() {
         "Unexpected argument use `coldbrew help` to see usage guide."
     );
     let folder = match args[1].as_str() {
-        "unit" => r"./support/tests/",
-        "integration" => r"./support/integration/",
+        "unit" => "./support/tests/",
+        "integration" => "./support/integration/",
         "help" => {
             println!("{USAGE_CMD}");
             exit(1);

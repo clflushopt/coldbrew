@@ -233,7 +233,7 @@ mod tests {
         );
         epilogue!(ops);
         *buffer = ops.finalize().unwrap();
-        start
+        return start
     }
 
     fn build_test_fn_x86(
@@ -249,7 +249,7 @@ mod tests {
         );
         let _offset = builder.as_ref().expect("REASON").offset();
         *buffer = builder.expect("REASON").finalize().unwrap();
-        dynasmrt::AssemblyOffset(0)
+        return dynasmrt::AssemblyOffset(0)
     }
 
     fn build_test_fn_aarch64(
@@ -276,7 +276,7 @@ mod tests {
             .expect("expected valid reference to builder")
             .offset();
         *buffer = builder.expect("expected builder").finalize().unwrap();
-        dynasmrt::AssemblyOffset(0)
+        return dynasmrt::AssemblyOffset(0)
     }
 
     #[test]

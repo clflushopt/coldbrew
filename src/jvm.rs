@@ -783,7 +783,7 @@ mod tests {
         assert_eq!(JVM_CLASS_FILE_MAGIC, class_file._magic);
         assert!(
             class_file._minor_version == 0
-                || class_file._minor_version == 65535
+                || class_file._minor_version == 0xFFFF
         );
         assert!(class_file._major_version > 61);
     }

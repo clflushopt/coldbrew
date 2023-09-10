@@ -184,8 +184,8 @@ impl Program {
     fn parse_method_types(bytes: &str) -> (Vec<Type>, Type) {
         let re = Regex::new(r"\(([^\)]*)\)([^$]+)").unwrap();
         let caps = re.captures(bytes).unwrap();
-        let arg_string = caps.get(1).map_or("", |m| m.as_str());
-        let return_type_string = caps.get(2).map_or("", |m| m.as_str());
+        let arg_string = caps.get(1).map_or("", |m| return m.as_str());
+        let return_type_string = caps.get(2).map_or("", |m| return m.as_str());
         let mut types: Vec<Type> = Vec::new();
         let ret_type = Self::decode_type(return_type_string);
 
@@ -212,7 +212,7 @@ impl Program {
         match t.t {
             BaseTypeKind::String => 18,
             BaseTypeKind::List => {
-                1 + Self::decode_type_string_length(t.sub_t.as_ref().unwrap())
+                return 1 + Self::decode_type_string_length(t.sub_t.as_ref().unwrap())
             }
             _ => 1,
         }
@@ -346,7 +346,7 @@ mod tests {
         for method in methods {
             let name_index = method._name_index;
             let program_method =
-                program.methods.get(&(name_index as usize)).unwrap();
+                &program.methods[&(name_index as usize)];
             assert_eq!(method.code, program_method.code);
         }
         assert_eq!(program.entry_point(), 27);

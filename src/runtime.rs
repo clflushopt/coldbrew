@@ -194,7 +194,7 @@ impl Instruction {
 
     // Returns a copy of instruction parameters.
     pub fn get_params(&self) -> Option<Vec<Value>> {
-        self.params.as_ref().cloned()
+        return self.params.as_ref().cloned()
     }
 }
 
@@ -343,7 +343,7 @@ impl Runtime {
     /// Returns the top value in the return values stack.
     /// Used for testing only
     pub fn top_return_value(&self) -> Option<Value> {
-        self.return_values.last().copied()
+        return self.return_values.last().copied()
     }
 
     /// Push a JVM value into the stack

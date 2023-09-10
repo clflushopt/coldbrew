@@ -133,7 +133,7 @@ impl Recorder {
                 // Check for recursive function calls.
                 // Fetch invoked function method index.
                 let method_index = match inst.get_params() {
-                    Some(params) => match params.get(0).unwrap() {
+                    Some(params) => match &params[0] {
                         Value::Int(m) => m.to_owned(),
                         _ => panic!(
                             "Expected InvokeStatic method index to be i32"
@@ -312,7 +312,7 @@ impl Recorder {
         let mut branch_target = branch_entry.pc;
         let mut offset = branch_entry.inst.get_params().map_or_else(
             || panic!("Expected branch target to have parameters"),
-            |params| match params.get(0).unwrap() {
+            |params| match &params[0] {
                 Value::Int(m) => m.to_owned(),
                 _ => panic!("Expected branch target index to be i32"),
             },
