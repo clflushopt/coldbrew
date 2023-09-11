@@ -48,9 +48,9 @@ enum Register {
     X26 = 0x26,
     X27 = 0x27,
     X28 = 0x28,
-    // Frame pointer (must be preserved).
+    // Stack/Frame pointer (must be preserved).
     X29 = 0x29,
-    // Return address.
+    // Link Register/Return address.
     X30 = 0x30,
     // Zero register.
     X31 = 0x31,
