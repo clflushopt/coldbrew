@@ -97,16 +97,11 @@ impl Recorder {
         }
         match inst.get_mnemonic() {
             OPCode::Goto => {
-                let offset = match inst.get_params() {
-                    Some(params) => match params.get(0) {
-                        Some(Value::Int(v)) => *v,
-                        _ => {
-                            panic!("Expected Goto to have integer parameter")
-                        }
-                    },
-                    None => {
-                        panic!("Expected Goto to have at least one parameter")
-                    }
+                let offset = match inst.nth(0) {
+                    Some(Value::Int(v)) => v,
+                    _ => panic!(
+                        "Expected Goto to have at least one integer parameter"
+                    ),
                 };
                 if offset > 0 {
                     return;
@@ -132,14 +127,11 @@ impl Recorder {
             OPCode::InvokeStatic => {
                 // Check for recursive function calls.
                 // Fetch invoked function method index.
-                let method_index = match inst.get_params() {
-                    Some(params) => match &params[0] {
-                        Value::Int(m) => m.to_owned(),
-                        _ => panic!(
-                            "Expected InvokeStatic method index to be i32"
-                        ),
-                    },
-                    _ => panic!("Expected InvokeStatic to have parameters"),
+                let method_index = match inst.nth(0) {
+                    Some(Value::Int(v)) => v,
+                    _ => panic!(
+                        "Expected InvokeStatic to have at least one parameter"
+                    ),
                 };
                 if self.trace_start.get_method_index() == method_index as usize
                 {

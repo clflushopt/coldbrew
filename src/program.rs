@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use regex::Regex;
 
 /// Primitive types supported by the JVM.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BaseTypeKind {
     Int,
     Long,
@@ -24,7 +24,7 @@ pub struct Type {
 }
 
 impl Type {
-    /// Returns the size in words of a given type.
+    /// Returns the size in WORD (4 bytes) of a given type.
     pub fn size(&self) -> usize {
         match self.t {
             BaseTypeKind::Int | BaseTypeKind::Float => 1,
@@ -212,7 +212,9 @@ impl Program {
         match t.t {
             BaseTypeKind::String => 18,
             BaseTypeKind::List => {
-                return 1 + Self::decode_type_string_length(t.sub_t.as_ref().unwrap())
+                return 1 + Self::decode_type_string_length(
+                    t.sub_t.as_ref().unwrap(),
+                )
             }
             _ => 1,
         }
@@ -345,8 +347,7 @@ mod tests {
 
         for method in methods {
             let name_index = method._name_index;
-            let program_method =
-                &program.methods[&(name_index as usize)];
+            let program_method = &program.methods[&(name_index as usize)];
             assert_eq!(method.code, program_method.code);
         }
         assert_eq!(program.entry_point(), 27);

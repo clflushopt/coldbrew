@@ -9,23 +9,35 @@ use crate::trace;
 use std::collections::HashMap;
 use std::fmt;
 
-type Result<T> = std::result::Result<T, RuntimeError>;
-
 /// `RuntimeErrorKind` represents the possible errors that can occur
 /// during runtime
-#[derive(Debug, Copy, Clone)]
-pub enum RuntimeErrorKind {}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeErrorKind {
+    InvalidValue,
+    InvalidOperandType(OPCode),
+    MissingOperands(OPCode),
+}
 
 /// `RuntimeError` is a custom type used to handle and represents
 /// possible execution failures.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeError {
-    _kind: RuntimeErrorKind,
+    kind: RuntimeErrorKind,
 }
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "runtime error occured")
+        match self.kind {
+            RuntimeErrorKind::InvalidValue => {
+                write!(f, "Expected value of type (int, float, long, double)")
+            }
+            RuntimeErrorKind::MissingOperands(opcode) => {
+                write!(f, "Instruction {opcode} expects at least on operand, got none.")
+            }
+            RuntimeErrorKind::InvalidOperandType(opcode) => {
+                write!(f, "Invalid operand type for instruction {opcode}")
+            }
+        }
     }
 }
 
@@ -36,6 +48,12 @@ pub enum Value {
     Long(i64),
     Float(f32),
     Double(f64),
+}
+
+/// Trait used to represent a JVM value.
+pub trait TypedValue {
+    /// Returns the base type of the value.
+    fn t() -> BaseTypeKind;
 }
 
 /// Implementation of JVM value helper functions to get the type and operate
@@ -51,6 +69,11 @@ impl Value {
             Self::Float(_) => BaseTypeKind::Float,
             Self::Double(_) => BaseTypeKind::Double,
         }
+    }
+
+    /// Given a value returns its basetype.
+    pub const fn kind(v: &Value) -> BaseTypeKind {
+        v.t()
     }
 
     /// Converts an existing value from it's base type to `BaseTypeKind::Long`.
@@ -174,17 +197,31 @@ impl Value {
 #[derive(Debug, Clone)]
 pub struct Instruction {
     mnemonic: OPCode,
-    params: Option<Vec<Value>>,
+    operands: Option<Vec<Value>>,
 }
 
 impl Instruction {
     // Creates a new instruction.
     pub fn new(mnemonic: OPCode, params: Option<Vec<Value>>) -> Self {
-        Self { mnemonic, params }
+        Self {
+            mnemonic,
+            operands: params,
+        }
     }
     // Returns instruction mnemonic.
     pub fn get_mnemonic(&self) -> OPCode {
         self.mnemonic
+    }
+
+    /// Returns the nth parameter of an instruction.
+    pub fn nth(&self, index: usize) -> Option<Value> {
+        match &self.operands {
+            Some(params) => match params.get(index) {
+                Some(v) => Some(*v),
+                _ => None,
+            },
+            None => None,
+        }
     }
 
     // Set instruction mnemonic.
@@ -194,7 +231,7 @@ impl Instruction {
 
     // Returns a copy of instruction parameters.
     pub fn get_params(&self) -> Option<Vec<Value>> {
-        return self.params.as_ref().cloned()
+        return self.operands.clone();
     }
 }
 
@@ -291,7 +328,7 @@ pub struct Runtime {
     frames: Vec<Frame>,
     // Trace profiling statistics, indexed by the program counter
     // where each trace starts.
-    recorder: trace::Recorder,
+    pub recorder: trace::Recorder,
     profiler: Profiler,
     // traces: Vec<Trace>,
     // used to store return values
@@ -321,7 +358,7 @@ impl Runtime {
         }
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub fn run(&mut self) -> Result<(), RuntimeError> {
         while !self.frames.is_empty() {
             let inst = self.fetch();
             let pc = self.frames.last().unwrap().pc;
@@ -333,7 +370,7 @@ impl Runtime {
             if self.recorder.is_recording() {
                 self.recorder.record(pc, inst.clone());
             }
-            self.eval(&inst);
+            self.eval(&inst)?
         }
 
         let _ = self.recorder.debug();
@@ -343,7 +380,7 @@ impl Runtime {
     /// Returns the top value in the return values stack.
     /// Used for testing only
     pub fn top_return_value(&self) -> Option<Value> {
-        return self.return_values.last().copied()
+        return self.return_values.last().copied();
     }
 
     /// Push a JVM value into the stack
@@ -389,105 +426,117 @@ impl Runtime {
     }
 
     /// Evaluate a given instruction.
-    fn eval(&mut self, inst: &Instruction) {
+    fn eval(&mut self, inst: &Instruction) -> Result<(), RuntimeError> {
         if let Some(_frame) = self.frames.last_mut() {
             match inst.mnemonic {
-                OPCode::IconstM1 => self.push(Value::Int(-1)),
-                OPCode::Iconst0 => self.push(Value::Int(0)),
-                OPCode::Iconst1 => self.push(Value::Int(1)),
-                OPCode::Iconst2 => self.push(Value::Int(2)),
-                OPCode::Iconst3 => self.push(Value::Int(3)),
-                OPCode::Iconst4 => self.push(Value::Int(4)),
-                OPCode::Iconst5 => self.push(Value::Int(5)),
-                OPCode::Lconst0 => self.push(Value::Long(0)),
-                OPCode::Lconst1 => self.push(Value::Long(1)),
-                OPCode::Fconst0 => self.push(Value::Float(0.)),
-                OPCode::Fconst1 => self.push(Value::Float(1.)),
-                OPCode::Fconst2 => self.push(Value::Float(2.)),
-                OPCode::Dconst0 => self.push(Value::Double(0.)),
-                OPCode::Dconst1 => self.push(Value::Double(1.)),
+                OPCode::IconstM1 => Ok(self.push(Value::Int(-1))),
+                OPCode::Iconst0 => Ok(self.push(Value::Int(0))),
+                OPCode::Iconst1 => Ok(self.push(Value::Int(1))),
+                OPCode::Iconst2 => Ok(self.push(Value::Int(2))),
+                OPCode::Iconst3 => Ok(self.push(Value::Int(3))),
+                OPCode::Iconst4 => Ok(self.push(Value::Int(4))),
+                OPCode::Iconst5 => Ok(self.push(Value::Int(5))),
+                OPCode::Lconst0 => Ok(self.push(Value::Long(0))),
+                OPCode::Lconst1 => Ok(self.push(Value::Long(1))),
+                OPCode::Fconst0 => Ok(self.push(Value::Float(0.))),
+                OPCode::Fconst1 => Ok(self.push(Value::Float(1.))),
+                OPCode::Fconst2 => Ok(self.push(Value::Float(2.))),
+                OPCode::Dconst0 => Ok(self.push(Value::Double(0.))),
+                OPCode::Dconst1 => Ok(self.push(Value::Double(1.))),
                 OPCode::BiPush
                 | OPCode::SiPush
                 | OPCode::Ldc
-                | OPCode::Ldc2W => match &inst.params {
-                    Some(params) => self.push(params[0]),
-                    None => panic!(
-                        "Expected instruction to have parameters got None"
-                    ),
+                | OPCode::Ldc2W => match &inst.operands {
+                    Some(params) => Ok(self.push(params[0])),
+                    None => Err(RuntimeError {
+                        kind: RuntimeErrorKind::MissingOperands(inst.mnemonic),
+                    }),
                 },
                 // Load operations.
                 OPCode::ILoad
                 | OPCode::LLoad
                 | OPCode::FLoad
-                | OPCode::DLoad => inst.params.as_ref().map_or_else(
+                | OPCode::DLoad => inst.operands.as_ref().map_or_else(
                     || {
-                        panic!(
-                            "Expected instruction to have parameters got None"
-                        )
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::MissingOperands(
+                                inst.mnemonic,
+                            ),
+                        })
                     },
                     |params| match params.get(0) {
-                        Some(Value::Int(v)) => self.load(*v as usize),
-                        _ => panic!(
-                            "Expected parameter to be of type Value::Int"
-                        ),
+                        Some(Value::Int(v)) => Ok(self.load(*v as usize)),
+                        _ => Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidOperandType(
+                                inst.mnemonic,
+                            ),
+                        }),
                     },
                 ),
                 OPCode::ILoad0
                 | OPCode::LLoad0
                 | OPCode::FLoad0
-                | OPCode::DLoad0 => self.load(0),
+                | OPCode::DLoad0 => Ok(self.load(0)),
                 OPCode::ILoad1
                 | OPCode::LLoad1
                 | OPCode::FLoad1
-                | OPCode::DLoad1 => self.load(1),
+                | OPCode::DLoad1 => Ok(self.load(1)),
                 OPCode::ILoad2
                 | OPCode::LLoad2
                 | OPCode::FLoad2
-                | OPCode::DLoad2 => self.load(2),
+                | OPCode::DLoad2 => Ok(self.load(2)),
                 OPCode::ILoad3
                 | OPCode::LLoad3
                 | OPCode::FLoad3
-                | OPCode::DLoad3 => self.load(3),
+                | OPCode::DLoad3 => Ok(self.load(3)),
                 // Store operations.
                 OPCode::IStore
                 | OPCode::LStore
                 | OPCode::FStore
-                | OPCode::DStore => inst.params.as_ref().map_or_else(
+                | OPCode::DStore => inst.operands.as_ref().map_or_else(
                     || {
-                        panic!(
-                            "Expected instruction to have parameters got None"
-                        )
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::MissingOperands(
+                                inst.mnemonic,
+                            ),
+                        })
                     },
                     |params| match params.get(0) {
-                        Some(Value::Int(v)) => self.store(*v as usize),
-                        _ => panic!(
-                            "Expected parameter to be of type Value::Int"
-                        ),
+                        Some(Value::Int(v)) => Ok(self.store(*v as usize)),
+                        _ => Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidOperandType(
+                                inst.mnemonic,
+                            ),
+                        }),
                     },
                 ),
                 OPCode::IStore0
                 | OPCode::LStore0
                 | OPCode::FStore0
-                | OPCode::DStore0 => self.store(0),
+                | OPCode::DStore0 => Ok(self.store(0)),
                 OPCode::IStore1
                 | OPCode::LStore1
                 | OPCode::FStore1
-                | OPCode::DStore1 => self.store(1),
+                | OPCode::DStore1 => Ok(self.store(1)),
                 OPCode::IStore2
                 | OPCode::LStore2
                 | OPCode::FStore2
-                | OPCode::DStore2 => self.store(2),
+                | OPCode::DStore2 => Ok(self.store(2)),
                 OPCode::IStore3
                 | OPCode::LStore3
                 | OPCode::FStore3
-                | OPCode::DStore3 => self.store(3),
+                | OPCode::DStore3 => Ok(self.store(3)),
                 // Arithmetic operations.
                 OPCode::IAdd | OPCode::LAdd | OPCode::FAdd | OPCode::DAdd => {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::add(&a, &b))
+                        Ok(self.push(Value::add(&a, &b)))
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::ISub | OPCode::LSub | OPCode::FSub | OPCode::DSub => {
@@ -495,7 +544,11 @@ impl Runtime {
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::sub(&a, &b))
+                        Ok(self.push(Value::sub(&a, &b)))
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IMul | OPCode::LMul | OPCode::FMul | OPCode::DMul => {
@@ -503,7 +556,11 @@ impl Runtime {
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::mul(&a, &b))
+                        Ok(self.push(Value::mul(&a, &b)))
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IDiv | OPCode::LDiv | OPCode::FDiv | OPCode::DDiv => {
@@ -511,7 +568,11 @@ impl Runtime {
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::div(&a, &b))
+                        Ok(self.push(Value::div(&a, &b)))
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IRem | OPCode::LRem | OPCode::FRem | OPCode::DRem => {
@@ -519,46 +580,69 @@ impl Runtime {
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::rem(&a, &b))
+                        Ok(self.push(Value::rem(&a, &b)))
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IInc => {
-                    let (index, constant) = if let Some(params) = &inst.params {
-                        match (params[0], params[1]) {
-                            (Value::Int(ii), Value::Int(cnst)) => {
-                                (ii as usize, cnst)
+                    if let Some(params) = &inst.operands {
+                        if params.len() < 2 {
+                            Err(RuntimeError {
+                                kind: RuntimeErrorKind::MissingOperands(
+                                    inst.mnemonic,
+                                ),
+                            })
+                        } else {
+                            match (params[0], params[1]) {
+                                (Value::Int(index), Value::Int(constant)) => {
+                                    self.frames
+                                        .last_mut()
+                                        .unwrap()
+                                        .locals
+                                        .entry(index as usize)
+                                        .and_modify(|val| {
+                                            *val = Value::add(
+                                                val,
+                                                &Value::Int(constant),
+                                            )
+                                        })
+                                        .or_insert(Value::Int(constant));
+                                    Ok(())
+                                }
+                                _ => Err(RuntimeError {
+                                    kind: RuntimeErrorKind::InvalidOperandType(
+                                        inst.mnemonic,
+                                    ),
+                                }),
                             }
-                            _ => panic!("Expected at least one parameter"),
                         }
                     } else {
-                        panic!("Instruction IInc is missing parameters")
-                    };
-                    self.frames
-                        .last_mut()
-                        .unwrap()
-                        .locals
-                        .entry(index)
-                        .and_modify(|val| {
-                            *val = Value::add(val, &Value::Int(constant))
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::MissingOperands(
+                                inst.mnemonic,
+                            ),
                         })
-                        .or_insert(Value::Int(constant));
+                    }
                 }
                 // Type conversion operations.
                 OPCode::L2I | OPCode::F2I | OPCode::D2I => {
                     let val = self.pop();
-                    self.push(val.expect("expected value").to_int())
+                    Ok(self.push(val.expect("expected value").to_int()))
                 }
                 OPCode::I2F | OPCode::L2F | OPCode::D2F => {
                     let val = self.pop();
-                    self.push(val.expect("expected value").to_float())
+                    Ok(self.push(val.expect("expected value").to_float()))
                 }
                 OPCode::I2D | OPCode::L2D | OPCode::F2D => {
                     let val = self.pop();
-                    self.push(val.expect("expected value").to_double())
+                    Ok(self.push(val.expect("expected value").to_double()))
                 }
                 OPCode::I2L | OPCode::F2L | OPCode::D2L => {
                     let val = self.pop();
-                    self.push(val.expect("expected value").to_long())
+                    Ok(self.push(val.expect("expected value").to_long()))
                 }
                 // Comparison operations.
                 OPCode::LCmp
@@ -570,7 +654,11 @@ impl Runtime {
                     let lhs = self.pop();
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
-                        self.push(Value::Int(Value::compare(&a, &b)))
+                        Ok(self.push(Value::Int(Value::compare(&a, &b))))
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 // Control flow operations.
@@ -579,7 +667,7 @@ impl Runtime {
                         panic!("expected value to be integer")
                     };
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -590,13 +678,14 @@ impl Runtime {
                     if value == 0 {
                         self.jump(relative_offset);
                     }
+                    Ok(())
                 }
                 OPCode::IfNe => {
                     let Some(Value::Int(value)) = self.pop() else {
                         panic!("expected value to be integer")
                     };
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -607,13 +696,14 @@ impl Runtime {
                     if value != 0 {
                         self.jump(relative_offset)
                     }
+                    Ok(())
                 }
                 OPCode::IfLt => {
                     let Some(Value::Int(value)) = self.pop() else {
                         panic!("expected value to be integer")
                     };
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -625,13 +715,14 @@ impl Runtime {
                     if value < 0 {
                         self.jump(relative_offset)
                     }
+                    Ok(())
                 }
                 OPCode::IfGt => {
                     let Some(Value::Int(value)) = self.pop() else {
                         panic!("expected value to be integer")
                     };
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -643,13 +734,14 @@ impl Runtime {
                     if value > 0 {
                         self.jump(relative_offset)
                     }
+                    Ok(())
                 }
                 OPCode::IfLe => {
                     let Some(Value::Int(value)) = self.pop() else {
                         panic!("expected value to be integer");
                     };
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -661,13 +753,14 @@ impl Runtime {
                     if value <= 0 {
                         self.jump(relative_offset)
                     }
+                    Ok(())
                 }
                 OPCode::IfGe => {
                     let Some(Value::Int(value)) = self.pop() else {
                         panic!("expected value to be integer");
                     };
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -679,12 +772,13 @@ impl Runtime {
                     if value >= 0 {
                         self.jump(relative_offset)
                     }
+                    Ok(())
                 }
                 OPCode::IfICmpEq => {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -697,13 +791,18 @@ impl Runtime {
                         if a == b {
                             self.jump(relative_offset)
                         }
+                        Ok(())
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IfICmpNe => {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -716,13 +815,18 @@ impl Runtime {
                         if a != b {
                             self.jump(relative_offset)
                         }
+                        Ok(())
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IfICmpLt => {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -735,13 +839,18 @@ impl Runtime {
                         if a < b {
                             self.jump(relative_offset)
                         }
+                        Ok(())
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IfICmpGt => {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -754,13 +863,18 @@ impl Runtime {
                         if a > b {
                             self.jump(relative_offset)
                         }
+                        Ok(())
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IfICmpLe => {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -773,13 +887,18 @@ impl Runtime {
                         if a <= b {
                             self.jump(relative_offset)
                         }
+                        Ok(())
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 OPCode::IfICmpGe => {
                     let rhs = self.pop();
                     let lhs = self.pop();
 
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -792,11 +911,16 @@ impl Runtime {
                         if a >= b {
                             self.jump(relative_offset)
                         }
+                        Ok(())
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 // Goto
                 OPCode::Goto => {
-                    let relative_offset = inst.params.as_ref().map_or_else(
+                    let relative_offset = inst.operands.as_ref().map_or_else(
                         || {
                             panic!(
                              "Expected instruction to have parameters got None"
@@ -805,7 +929,7 @@ impl Runtime {
                         |params| Self::get_relative_offset(params),
                     );
 
-                    self.jump(relative_offset)
+                    Ok(self.jump(relative_offset))
                 }
                 // Return with value.
                 OPCode::IReturn
@@ -816,16 +940,21 @@ impl Runtime {
                         let value = frame.stack.pop().unwrap();
                         // This is for debugging purposes.
                         self.return_values.push(value);
-                        self.push(value)
+                        Ok(self.push(value))
+                    } else {
+                        Err(RuntimeError {
+                            kind: RuntimeErrorKind::InvalidValue,
+                        })
                     }
                 }
                 // Void return
                 OPCode::Return => {
                     self.frames.pop();
+                    Ok(())
                 }
                 // Function calls.
                 OPCode::InvokeStatic => {
-                    let name_index = match &inst.params {
+                    let name_index = match &inst.operands {
                         Some(params) => match params.get(0) {
                             Some(Value::Int(index)) => index,
                             _ => panic!(
@@ -834,16 +963,19 @@ impl Runtime {
                         },
                         _ => panic!("InvokeStatic expected parameters"),
                     };
-                    self.invoke(*name_index as usize)
+                    Ok(self.invoke(*name_index as usize))
                 }
                 // Currently only supports System.out.println.
                 OPCode::InvokeVirtual => {
                     let value = self.pop();
                     println!("System.out.println : {value:?}");
+                    Ok(())
                 }
-                OPCode::GetStatic | OPCode::NOP | OPCode::Dup => (),
+                OPCode::GetStatic | OPCode::NOP | OPCode::Dup => Ok(()),
                 _ => todo!(),
             }
+        } else {
+            Ok(println!("Reached last frame...leaving"))
         }
     }
 
@@ -989,7 +1121,10 @@ impl Runtime {
                 };
                 self.frames.push(frame);
 
-                Instruction { mnemonic, params }
+                Instruction {
+                    mnemonic,
+                    operands: params,
+                }
             }
             None => panic!("no next instruction"),
         }

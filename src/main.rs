@@ -25,11 +25,14 @@ fn main() {
         "integration" => "./support/integration/",
         "help" => {
             println!("{USAGE_CMD}");
-            exit(1);
+            exit(0);
         }
-        _ => panic!(
-            "Unexpected argument use `coldbrew help` to see usage guide."
-        ),
+        _ => {
+            println!(
+                "Unexpected argument use `coldbrew help` to see usage guide."
+            );
+            exit(64);
+        }
     };
 
     let mut paths: Vec<std::path::PathBuf> = Vec::new();
@@ -45,11 +48,11 @@ fn main() {
         let path = match path {
             Ok(entry) => entry.path(),
             Err(err) => {
-                panic!("Error occured when reading file paths : {err}")
+                println!("Error occured when reading file paths : {err}");
+                exit(1);
             }
         };
         if let Some(extension) = path.extension() {
-            println!("File : {:?}", path.file_name());
             if to_skip.contains(&path.file_name().unwrap().to_str().unwrap()) {
                 continue;
             }
@@ -59,9 +62,6 @@ fn main() {
         }
     }
     for path in &paths {
-        // What are the program components ?
-        // 1. Reads and parse Java class files.
-        println!("[+] Reading class file {:?}", path.as_os_str());
         let class_file_bytes = read_class_file(path).unwrap_or_else(|_| {
             panic!("Failed to read class file : {:?}", path.as_os_str())
         });
@@ -70,13 +70,8 @@ fn main() {
                 panic!("Failed to parse class file {:?}", path.as_os_str())
             });
 
-        // 2. Build abstract program from class file to run in the interpreter.
-        println!("[+] Building program");
         let program = Program::new(&class_file);
-        // 3. Interepreter executes bytecode and records a trace.
-        //  When trace is hot it is compiled to assembly
         let mut runtime = Runtime::new(program);
-        println!("[+] Running program");
         match runtime.run() {
             Ok(()) => {
                 println!("[+] Program finished running successfully !");
