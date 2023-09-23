@@ -466,7 +466,7 @@ impl JitCache {
             self.registers.push_back(reg)
         }
 
-        match (dst.clone(), op2, dst) {
+        match (dst, op2, dst) {
             (
                 Operand::Register(r1),
                 Operand::Register(r2),
@@ -511,7 +511,7 @@ mod tests {
 
     use std::slice;
 
-    use crate::arm64::{self, mask};
+    use crate::arm64::{self};
 
     use super::*;
     use dynasmrt::dynasm;
@@ -534,7 +534,7 @@ mod tests {
         );
         epilogue!(ops);
         *buffer = ops.finalize().unwrap();
-        return start;
+        return start
     }
 
     fn build_test_fn_x86(
@@ -550,7 +550,7 @@ mod tests {
         );
         let _offset = builder.as_ref().expect("REASON").offset();
         *buffer = builder.expect("REASON").finalize().unwrap();
-        return dynasmrt::AssemblyOffset(0);
+        return dynasmrt::AssemblyOffset(0)
     }
 
     fn build_test_fn_imm(
@@ -558,12 +558,12 @@ mod tests {
     ) -> dynasmrt::AssemblyOffset {
         let mut builder = dynasmrt::x64::Assembler::new();
         let mut litpool = LitPool::new();
-        let offset = litpool.push_u64(0xcafebabe);
+        let _offset = litpool.push_u64(0xcafebabe);
         let a = 0xcafebabe;
-        let b = 0x0;
+        let _b = 0x0;
 
         use arm64;
-        use dynasmrt::DynasmLabelApi;
+        
 
         // let lo = a & mask(16, 0);
         let (hi, lo) = arm64::split(a);
@@ -573,8 +573,8 @@ mod tests {
         println!("{:#x}", hi);
 
         dynasm!(builder.as_mut().expect("REASON")
-            ; movz x0, lo as u32
-            ; movk x0, hi as u32, LSL #16
+            ; movz x0, lo
+            ; movk x0, hi, LSL #16
             ; movz x1, #0
             ; add x0, x0, x1
             ; ret
@@ -582,7 +582,7 @@ mod tests {
         litpool.emit(builder.as_mut().unwrap());
         let _offset = builder.as_ref().expect("REASON").offset();
         *buffer = builder.expect("REASON").finalize().unwrap();
-        return dynasmrt::AssemblyOffset(0);
+        return dynasmrt::AssemblyOffset(0)
     }
 
     fn build_test_fn_aarch64(
@@ -609,7 +609,7 @@ mod tests {
             .expect("expected valid reference to builder")
             .offset();
         *buffer = builder.expect("expected builder").finalize().unwrap();
-        return dynasmrt::AssemblyOffset(0);
+        return dynasmrt::AssemblyOffset(0)
     }
 
     #[ignore = "ignore until unsafe segfault bug is fixed"]
@@ -671,7 +671,7 @@ mod tests {
         assert!(class_file.is_ok());
         let program = Program::new(&class_file.unwrap());
         let mut runtime = Runtime::new(program);
-        assert!(runtime.run().is_ok());
+        runtime.run().unwrap();
         assert_eq!(runtime.top_return_value(), Some(Value::Int(55)));
         let trace = runtime.recorder.recording();
         let mut jit = JitCache::new();
@@ -704,8 +704,8 @@ mod tests {
 
         let mut my_struct = MyStruct { registers: [0; 8] };
 
-        let mut my_vec = MyVecStruct {
-            registers: vec![0 as u64; 8],
+        let _my_vec = MyVecStruct {
+            registers: vec![0u64; 8],
         };
 
         unsafe {
@@ -729,7 +729,7 @@ mod tests {
                 inout(reg) &mut my_struct.registers => _,
                 // inout(reg)  my_vec.registers.as_mut_ptr() as *mut u64 => _,
             );
-        }
+        };
 
         // Now, my_struct.registers contains [1, 2, 3, 4, 5, 6, 7, 8]
         println!("{:?}", my_struct.registers);

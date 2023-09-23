@@ -7,7 +7,7 @@ pub fn mask(len: u64, start: u64) -> u64 {
 
 /// Split a u64 into two chunks of high and low bits.
 pub fn split(x: u64) -> (u32, u32) {
-    ((x >> 16) as u32, (x as u64 & mask(16, 0)) as u32)
+    return ((x >> 16) as u32, (x & mask(16, 0)) as u32)
 }
 
 #[cfg(test)]
@@ -19,7 +19,7 @@ mod tests {
         // an ARM64 instruction.
         // This is useful when loading immediates that don't fit the fixed
         // size instruction width of 32-bits.
-        let x = 0x48f0d0 as i32;
+        let x = 0x48f0d0i32;
         // To read x in x0 we can use a movz movk pair
         // movz x0, #0xf0d0
         // movk x0, #0x48, lsl #16
@@ -28,11 +28,11 @@ mod tests {
         let hi = x as u64 >> 16;
         assert_eq!((hi << 16 | lo) as i32, x);
         // Another example with an even bigger integer
-        let v = 0x1122334455667788 as u64;
-        let lo_1 = v & mask(16, 0) as u64;
-        let lo_2 = v & mask(16, 16) as u64;
-        let lo_3 = v & mask(16, 32) as u64;
-        let lo_4 = v & mask(16, 48) as u64;
+        let v = 0x1122334455667788u64;
+        let lo_1 = v & mask(16, 0);
+        let lo_2 = v & mask(16, 16);
+        let lo_3 = v & mask(16, 32);
+        let lo_4 = v & mask(16, 48);
         assert_eq!(lo_4 | lo_3 | lo_2 | lo_1, v);
     }
 }
