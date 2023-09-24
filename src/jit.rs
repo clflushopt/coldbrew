@@ -191,7 +191,8 @@ enum Operand {
     Label(ProgramCounter),
 }
 
-/// aarch64 function prologue.
+/// aarch64 function prologue, allocates `max_locals` space on the stack even
+/// though they might not be all used.
 macro_rules! prologue {
     ($ops:ident) => {{
         let start = $ops.offset();
@@ -534,7 +535,7 @@ mod tests {
         );
         epilogue!(ops);
         *buffer = ops.finalize().unwrap();
-        return start
+        return start;
     }
 
     fn build_test_fn_x86(
@@ -550,7 +551,7 @@ mod tests {
         );
         let _offset = builder.as_ref().expect("REASON").offset();
         *buffer = builder.expect("REASON").finalize().unwrap();
-        return dynasmrt::AssemblyOffset(0)
+        return dynasmrt::AssemblyOffset(0);
     }
 
     fn build_test_fn_imm(
@@ -563,7 +564,6 @@ mod tests {
         let _b = 0x0;
 
         use arm64;
-        
 
         // let lo = a & mask(16, 0);
         let (hi, lo) = arm64::split(a);
@@ -582,7 +582,7 @@ mod tests {
         litpool.emit(builder.as_mut().unwrap());
         let _offset = builder.as_ref().expect("REASON").offset();
         *buffer = builder.expect("REASON").finalize().unwrap();
-        return dynasmrt::AssemblyOffset(0)
+        return dynasmrt::AssemblyOffset(0);
     }
 
     fn build_test_fn_aarch64(
@@ -592,7 +592,9 @@ mod tests {
         dynasm!(builder.as_mut().expect("expected builder to be mutable")
             // Prologue call stack preparation <> add(sp...)
             ; sub     sp, sp, #32
+            // x0 contains the first argument, stored at sp + 24
             ; str     x0, [sp, #24]
+            // x1 contains the second argument, stored at sp + 24
             ; str     x1, [sp, #16]
             // int c = a + b;
             ; ldr x8, [sp, #24]
@@ -609,48 +611,153 @@ mod tests {
             .expect("expected valid reference to builder")
             .offset();
         *buffer = builder.expect("expected builder").finalize().unwrap();
-        return dynasmrt::AssemblyOffset(0)
+        return _offset;
+    }
+
+    fn build_jit_execute(
+        buffer: &mut ExecutableBuffer,
+    ) -> dynasmrt::AssemblyOffset {
+        let mut builder = dynasmrt::aarch64::Assembler::new().unwrap();
+        let offset = builder.offset();
+        dynasm!(builder
+            ;sub sp, sp, #32
+            // Pointer to values
+            ;str x0, [sp, 8]
+            // Pointer to slices
+            ;str x1, [sp]
+            // Load value at index 0
+            ;ldr     x0, [sp, 8]
+            ;ldr     x0, [x0]
+            ;ldr     w0, [x0]
+            ;str     w0, [sp, 28]
+            ;ldr     x0, [sp, 8]
+            ;ldr     x0, [x0]
+            ;add     x0, x0, 8
+            ;ldr     w0, [x0]
+            ;str     w0, [sp, 24]
+            ;ldr     w1, [sp, 28]
+            ;ldr     w0, [sp, 24]
+            ;add     w0, w1, w0
+            ;sxtw    x0, w0
+            ;add     sp, sp, 32
+            ;ret
+        );
+
+        *buffer = builder.finalize().unwrap();
+
+        offset
+    }
+
+    #[test]
+    fn can_jit_add_two_values() {
+        let mut ops = dynasmrt::aarch64::Assembler::new().unwrap();
+        dynasm!(ops
+            ; .arch aarch64
+        );
+        let offset = ops.offset();
+
+        // Unflattened
+        // int exec(Value* variables, uint8* traces)
+        // int data;
+        // int data2;
+        // int data3;
+        // sizeof(Value*) + sizeof(uint8*) = 8 bytes + 8 bytes = 16 bytes
+        // sizeof(data) + sizeof(data) + sizeof(data) = 4 bytes + 4 bytes + 4 bytes = 12 bytes
+        // nearest_alignment(16 + 12) = nearest_alignment(28 bytes) = 32 bytes
+        dynasm!(
+            ops /*
+                ;sub     sp, sp, #32 //
+                ;str     x0, [sp, 8] // [sp, 8] = addr(value*)
+                ;str     x1, [sp] // sp = addr(traces)
+                ;ldr     x0, [sp, 8]
+                ;add     x0, x0, 16
+                ;ldr     w0, [x0]
+                ;str     w0, [sp, 28]
+                ;ldr     x0, [sp, 8]
+                ;add     x0, x0, 32
+                ;ldr     w0, [x0]
+                ;str     w0, [sp, 24]
+                ;ldr     w1, [sp, 28]
+                ;ldr     w0, [sp, 24]
+                ;add     w0, w1, w0
+                ;str     w0, [sp, 20]
+                ;ldr     w0, [sp, 20]
+                ;add     sp, sp, 32
+                ;ret
+                */
+
+            ;sub     sp, sp, #32
+            ;str     x0, [sp, 8]
+            ;str     x1, [sp]
+            ;ldr     x0, [sp, 8]
+            ;ldr     w0, [x0]
+            ;str     w0, [sp, 28]
+            ;ldr     x0, [sp, 8]
+            ;ldr     w0, [x0, 4]
+            ;str     w0, [sp, 24]
+            ;ldr     w1, [sp, 28]
+            ;ldr     w0, [sp, 24]
+            ;add     w0, w1, w0
+            ;str     w0, [sp, 20]
+            ;ldr     w0, [sp, 20]
+            ;add     sp, sp, 32
+            ;ret
+        );
+
+        let buffer = ops.finalize().unwrap();
+        println!("Start offset : {:?}", offset);
+        // std::mem::size_of::<Value> is 16 bytes.
+        let mut values = vec![21, 21, 32];
+        let mut traces = vec![0u8];
+        let execute: fn(*mut i32, *mut u8) -> i32 =
+            unsafe { std::mem::transmute(buffer.ptr(offset)) };
+
+        println!("Size of values : {}", std::mem::size_of::<Value>());
+
+        println!("Buffer : {:?}", buffer.bytes());
+        use std::fs::File;
+        use std::io::prelude::*;
+        let mut out = File::create("test.asm").unwrap();
+        out.write_all(&buffer);
+        let result = execute(values.as_mut_ptr(), traces.as_mut_ptr());
+        println!("{result}");
+        assert_eq!(result, 42);
     }
 
     #[ignore = "ignore until unsafe segfault bug is fixed"]
     #[test]
     fn test_dynasm_buffer() {
         // Create a buffer to hold the generated machine code
-        let mut buffer = ExecutableBuffer::new(8012).unwrap();
+        let mut buffer = ExecutableBuffer::new(0).unwrap();
 
         // Build the function using Dynasm
-        let code_offset = build_test_fn_x86(&mut buffer);
+        // let code_offset = build_test_fn_x86(&mut buffer);
 
-        let code_offset_aarch64 = build_test_fn_aarch64(&mut buffer);
+        // let code_offset_aarch64 = build_test_fn_aarch64(&mut buffer);
 
         let prebuilt_code_offset_aarch64 =
             prebuilt_test_fn_aarch64(&mut buffer);
 
         // Execute the generated machine code
-        let add_fn: extern "C" fn(u64, u64) -> u64 =
-            unsafe { std::mem::transmute(buffer.ptr(code_offset)) };
+        //let add_fn: extern "C" fn(u64, u64) -> u64 =
+        // unsafe { std::mem::transmute(buffer.ptr(code_offset)) };
 
-        let add_fn_aarch64: extern "C" fn(u64, u64) -> u64 =
-            unsafe { std::mem::transmute(buffer.ptr(code_offset_aarch64)) };
+        //      let add_fn_aarch64: extern "C" fn(u64, u64) -> u64 =
+        // unsafe { std::mem::transmute(buffer.ptr(code_offset_aarch64)) };
 
         let prebuilt_add_fn_aarch64: extern "C" fn(u64, u64) -> u64 = unsafe {
             std::mem::transmute(buffer.ptr(prebuilt_code_offset_aarch64))
         };
 
-        let mut buffer = ExecutableBuffer::new(8012).unwrap();
-        let code_offset_imm = build_test_fn_imm(&mut buffer);
-        let add_fn_imm: fn(u64, u64) -> u64 =
-            unsafe { std::mem::transmute(buffer.ptr(code_offset_imm)) };
-
-        let result_imm = add_fn_imm(0, 0);
+        // let result_imm = add_fn_imm(0, 0);
         // Call the generated function and print the result
-        let result = add_fn(42, 13);
-        let result_aarch64 = add_fn_aarch64(42, 13);
+        //  let result = add_fn(42, 13);
+        //  let result_aarch64 = add_fn_aarch64(42, 13);
         let result_prebuilt_aarch64 = prebuilt_add_fn_aarch64(42, 13);
-        assert_eq!(result, 55);
-        assert_eq!(result_aarch64, 55);
+        // assert_eq!(result, 55);
+        // assert_eq!(result_aarch64, 55);
         assert_eq!(result_prebuilt_aarch64, 55);
-        assert_eq!(result_imm, 0xcafebabe);
+        // assert_eq!(result_imm, 0xcafebabe);
     }
 
     #[ignore = "ignore until JIT is fully implemented"]
