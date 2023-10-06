@@ -32,7 +32,7 @@ enum Register {
     Rdi,
     Rsi,
     Rbp,
-    Rsp,
+    Rcsp,
     R8,
     R9,
     R10,
@@ -88,6 +88,7 @@ pub struct JitCache {
     registers: VecDeque<Register>,
     // Operand stack.
     operands: Vec<Operand>,
+    // Cache of native traces.
 }
 
 impl Default for JitCache {
@@ -108,6 +109,21 @@ impl JitCache {
 
     // Compile the trace given as argument and prepare a native trace
     // for execution.
+    //
+    // This is the tracelet JIT version where we only compile basic blocks
+    // and exit skip all control flow opcodes.
+    //
+    // Labels:
+    //
+    // ```
+    // let label = new_dynamic_label()
+    // labels.insert(pc, label) ; binds a label to a program counter.
+    //
+    // if labels.contains(pc):
+    //  // Bind the label to the current offset
+    //  define_dynamic(labels.get(pc), ops.offset())
+    // ```
+    // continue compiling
     //
     // Compile works as follows :
     // 1. Build a dynasmrt Assembler object.

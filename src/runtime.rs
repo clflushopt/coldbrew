@@ -367,10 +367,16 @@ impl Runtime {
             if self.recorder.is_recording() {
                 self.recorder.record(pc, inst.clone());
             }
+            if self.jit_cache.has_native_trace(pc) {
+                // If we have a native trace at this pc run it
+                // and capture the return value which is the next
+                // pc to execute.
+                pc = self.jit_cache.execute(pc);
+            }
             self.eval(&inst)?
         }
 
-        let _ = self.recorder.debug();
+        // let _ = self.recorder.debug();
         Ok(())
     }
 
