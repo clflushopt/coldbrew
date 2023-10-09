@@ -1,5 +1,5 @@
 //! JIT compiler for coldrew targeting x86_64.
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use crate::bytecode::OPCode;
 
@@ -89,6 +89,7 @@ pub struct JitCache {
     // Operand stack.
     operands: Vec<Operand>,
     // Cache of native traces.
+    traces: HashMap<ProgramCounter, Assembler>,
 }
 
 impl Default for JitCache {
@@ -103,8 +104,23 @@ impl JitCache {
         let registers = vec![];
         JitCache {
             registers: VecDeque::from(registers),
+            traces: HashMap::new(),
             operands: Vec::new(),
         }
+    }
+
+    // Execute the trace at `pc` and return the mutated locals for the frame
+    // and the program counter where the runtime should continue execution.
+    pub fn execute(&mut self, pc: ProgramCounter) -> ProgramCounter {
+        if self.traces.contains_key(&pc) {
+            // execute the assembled trace.
+        }
+        pc
+    }
+
+    /// Checks if a native trace exists at this `pc`.
+    pub fn has_native_trace(&self, pc: ProgramCounter) -> bool {
+        self.traces.contains_key(&pc)
     }
 
     // Compile the trace given as argument and prepare a native trace
@@ -154,12 +170,18 @@ impl JitCache {
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
         // Prologue for dynamically compiled code.
         let offset = prologue!(ops);
-        // Trace compilation
+        // Trace compilation :
+        // For now we compile only the prologue and epilogue and ensure that
+        // entering the Jit executing the assembled code and leaving the Jit
+        // works correct.
+        /*
         for trace in &recording.trace {
             match trace.instruction().get_mnemonic() {
                 _ => todo!(),
             }
         }
+        */
+
 
         // Epilogue for dynamically compiled code.
         epilogue!(ops);

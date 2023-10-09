@@ -2,9 +2,10 @@
 //! environment and running programs.
 use crate::bytecode::OPCode;
 use crate::jvm::CPInfo;
-use crate::profiler::Profiler;
 use crate::program::{BaseTypeKind, Program};
+use crate::jit;
 use crate::trace;
+use crate::profiler;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -323,12 +324,13 @@ pub struct Runtime {
     program: Program,
     // Stack frames.
     frames: Vec<Frame>,
-    // Trace profiling statistics, indexed by the program counter
-    // where each trace starts.
+    // Trace recorder.
     pub recorder: trace::Recorder,
-    profiler: Profiler,
-    // traces: Vec<Trace>,
-    // used to store return values
+    // Execution profiler.
+    profiler: profiler::Profiler,
+    // Jit cache.
+    jit_cache: jit::JitCache,
+    // Used to store return values of the VM.
     return_values: Vec<Value>,
 }
 
@@ -350,7 +352,8 @@ impl Runtime {
             program,
             frames: vec![initial_frame],
             recorder: trace::Recorder::new(),
-            profiler: Profiler::new(),
+            profiler: profiler::Profiler::new(),
+            jit_cache: jit::JitCache::new(),
             return_values: vec![],
         }
     }
@@ -371,7 +374,7 @@ impl Runtime {
                 // If we have a native trace at this pc run it
                 // and capture the return value which is the next
                 // pc to execute.
-                pc = self.jit_cache.execute(pc);
+                let cont_pc = self.jit_cache.execute(pc);
             }
             self.eval(&inst)?
         }
