@@ -27,7 +27,7 @@ impl RecordEntry {
 
 #[derive(Debug, Clone)]
 pub struct Recording {
-    start: ProgramCounter,
+    pub start: ProgramCounter,
     pub trace: Vec<RecordEntry>,
     inner_branch_targets: HashSet<ProgramCounter>,
     outer_branch_targets: HashSet<ProgramCounter>,

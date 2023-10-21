@@ -369,12 +369,18 @@ impl Runtime {
             }
             if self.recorder.is_recording() {
                 self.recorder.record(pc, inst.clone());
+                // TODO: Clean up the naming on trace recoder implementation.
+                let recorded_trace = self.recorder.recording();
+                // Compile recorded trace.
+                self.jit_cache.compile(&recorded_trace);
             }
             if self.jit_cache.has_native_trace(pc) {
+                println!("Entering the Jit @ {pc}");
                 // If we have a native trace at this pc run it
                 // and capture the return value which is the next
                 // pc to execute.
                 let cont_pc = self.jit_cache.execute(pc);
+                println!("Exiting the Jit @ {pc}");
             }
             self.eval(&inst)?
         }

@@ -2,15 +2,14 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::bytecode::OPCode;
-
 use crate::runtime::ProgramCounter;
 use crate::runtime::Value;
 use crate::trace::Recording;
+
 use dynasmrt::components::LitPool;
 use dynasmrt::dynasm;
 use dynasmrt::x64::Assembler;
-use dynasmrt::AssemblyOffset;
-use dynasmrt::DynasmApi;
+use dynasmrt::{AssemblyOffset, DynasmApi, ExecutableBuffer};
 
 /// Intel x86-64 registers, ordered by their syntactic order in the Intel
 /// manuals. The usage of the registers follows the System ADM64 ABI.
@@ -82,6 +81,11 @@ macro_rules! epilogue {
     );};
 }
 
+/// `NativeTrace` is a pair of `usize` and `Assembler` that represents an entry
+/// point in the `Assembler` buffer.
+#[derive(Debug)]
+pub struct NativeTrace(AssemblyOffset, ExecutableBuffer);
+
 /// `JitCache` is responsible for compiling and caching recorded native traces.
 pub struct JitCache {
     // Internal cache of available registers.
@@ -89,7 +93,7 @@ pub struct JitCache {
     // Operand stack.
     operands: Vec<Operand>,
     // Cache of native traces.
-    traces: HashMap<ProgramCounter, Assembler>,
+    traces: HashMap<ProgramCounter, NativeTrace>,
 }
 
 impl Default for JitCache {
@@ -114,6 +118,16 @@ impl JitCache {
     pub fn execute(&mut self, pc: ProgramCounter) -> ProgramCounter {
         if self.traces.contains_key(&pc) {
             // execute the assembled trace.
+            if let trace = self.traces.get_mut(&pc).expect("Expected a native trace @ {pc}") {
+                println!("Found a native trace @ {pc}");
+                let entry = trace.0;
+                let buf = &trace.1;
+                let execute: fn() = unsafe { std::mem::transmute(buf.ptr(entry)) };
+
+                println!("Executing native trace");
+                execute();
+                println!("Done executing native trace");
+            }
         }
         pc
     }
@@ -166,7 +180,8 @@ impl JitCache {
     pub fn compile(
         &mut self,
         recording: &Recording,
-    ) -> (AssemblyOffset, Assembler) {
+    )  {
+        let pc = recording.start;
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
         // Prologue for dynamically compiled code.
         let offset = prologue!(ops);
@@ -186,7 +201,11 @@ impl JitCache {
         // Epilogue for dynamically compiled code.
         epilogue!(ops);
 
-        (offset, ops)
+        println!("Compiled trace @ {pc}");
+        let buf = ops.finalize().unwrap();
+        let native_trace = NativeTrace(offset, buf);
+        self.traces.insert(pc, native_trace);
+        println!("Added trace to native traces");
     }
 
     // Emit a load operation, where `dst` must be a register and `src` a memory
