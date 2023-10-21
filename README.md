@@ -1,18 +1,20 @@
 # coldbrew
 
-`coldbrew` is a tracing JIT compiler for the Java Virtual Machine, it currently
-supports mainly primitive numeric types (`int`, `long`, `float`, `double`) and
+`coldbrew` is a (WIP) tracing JIT compiler for the Java Virtual Machine, with
+support for primitive numeric types (`int`, `long`, `float`, `double`) and
 serves as a demo project for how JIT compilers work in genenral.
 
-`coldbrew` is inspired by TigerShrimp[^1] and Higgs[^2], the TigerShrimp C++
-implementation[^3] is very readable and was of huge help to debug some issues
-along the line. Other implementations I've found useful is LuaJIT 2.0 and Mike
-Pall's email about the LuaJIT internals which you can in the mailing list[^4].
+`coldbrew` is inspired primarly by TigerShrimp[^1] and some ideas from Higgs[^2]
+the TigerShrimp C++ implementation[^3] is very readable and was of huge help
+to debug some issues along the line.
+Other implementations I've found useful is LuaJIT 2.0 and Mike Pall's email
+about the LuaJIT internals which you can in the mailing list[^4].
 
 While I tried to remain as close as the TigerShrimp implementation as possible,
 there are some changes in the overall structure since we are using Rust.
 
-Other notable changes is that we target ARM64[^5] primarly instead of x86.
+I was planning to start with ARM64[^5] then do x86 but I changed machines and
+basically refactored the code to start with x86 support.
 
 I was originally planning to use the C++ implementation as a baseline to test
 against but I didn't have much success building it.
@@ -42,9 +44,15 @@ This approach is suitable for starting out the JIT because while it's expensive
 to exit the JIT at each jump we get small chunks of assembly we can introspect
 and understand.
 
-
 To make `coldbrew` truly tracing we will need to handle *side exits* and *trace
-stitching*.
+stitching*. I've had a lot of misconceptions about handling exits especially
+since each tracelet can be a succession of 6 bytecode instructions but each
+are separated by one or two instructions that we can't jit compile, this is
+especially complicated to do correctly because unlike a method-based Jit you
+can't increment the program counter by the number of bytecode you just compiled
+because they are interleaved with non-compiled instructions.
+
+The HotpathVM paper[^7] has a nice explanation of this problem.
 
 ### Trace recording and execution
 
@@ -187,4 +195,6 @@ JavaScript](https://pointersgonewild.com/2012/12/08/higgs-my-new-tracing-jit-for
 [^5]: [It's called arm64](https://lore.kernel.org/lkml/CA+55aFxL6uEre-c=JrhPfts=7BGmhb2Js1c2ZGkTH8F=+rEWDg@mail.gmail.com/)
 
 [^6]: [Java SE7 Spec](https://docs.oracle.com/javase/specs/jvms/se7/html/)
+
+[^7]: [HotpathVM: An Effective JIT Compiler for Resource-constrained Devices](https://www.usenix.org/legacy/events/vee06/full_papers/p144-gal.pdf)
 
