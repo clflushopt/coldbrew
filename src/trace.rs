@@ -74,7 +74,7 @@ impl Recorder {
                 | OPCode::FReturn
                 | OPCode::DReturn => {
                     if pc.get_method_index() == entry.pc.get_method_index() {
-                        println!("Found recursive return -- abort recording");
+                        // println!("Found recursive return -- abort recording");
                         self.is_recording = false;
                         return false;
                     }

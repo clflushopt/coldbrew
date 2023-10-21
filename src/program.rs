@@ -24,6 +24,13 @@ pub struct Type {
 }
 
 impl Type {
+    /// Empty constructor, we could use `Default` but hey.
+    pub fn new() -> Self {
+        Self {
+            t: BaseTypeKind::Int,
+            sub_t: None,
+        }
+    }
     /// Returns the size in WORD (4 bytes) of a given type.
     pub fn size(&self) -> usize {
         match self.t {
@@ -40,7 +47,8 @@ pub struct Program {
     // Constant pool.
     pub constant_pool: Vec<CPInfo>,
     // Methods.
-    pub methods: HashMap<usize, Method>,
+    // pub methods: HashMap<usize, Method>,
+    pub methods: Vec<Method>,
 }
 
 /// Java class method representation for the interpreter.
@@ -56,6 +64,21 @@ pub struct Method {
     _stack_map_table: Option<Vec<StackMapFrame>>,
 }
 
+impl Default for Method {
+    fn default() -> Self {
+        Self {
+            _name_index: 0,
+            _return_type: Type::new(),
+            arg_types: Vec::new(),
+            _max_stack: 0,
+            _max_locals: 0,
+            code: Vec::new(),
+            _constant: None,
+            _stack_map_table: None,
+        }
+    }
+}
+
 impl Program {
     /// Build a new program from a parsed class file.
     /// # Panics
@@ -63,7 +86,8 @@ impl Program {
     #[must_use]
     pub fn new(class_file: &JVMClassFile) -> Self {
         let constants = class_file.constant_pool();
-        let mut methods: HashMap<usize, Method> = HashMap::new();
+        // let mut methods: HashMap<usize, Method> = HashMap::new();
+        let mut methods: Vec<Method> = vec![Method::default(); 256];
         for method_info in &class_file.methods() {
             let mut arg_types: Vec<Type> = Vec::new();
             let mut return_type: Type = Type {
@@ -124,7 +148,8 @@ impl Program {
                 _constant: constant,
                 _stack_map_table: stack_map_table,
             };
-            methods.insert(method_info.name_index() as usize, method);
+            // methods.insert(method_info.name_index() as usize, method);
+            methods[method_info.name_index() as usize] = method;
         }
 
         Self {
@@ -156,12 +181,12 @@ impl Program {
     // Returns program entry point, in this case the index of the method
     // main.
     pub fn entry_point(&self) -> usize {
-        for index in self.methods.keys() {
-            match self.constant_pool.get(*index) {
+        for (index, _) in self.methods.iter().enumerate() {
+            match self.constant_pool.get(index) {
                 Some(constant) => {
                     if let CPInfo::ConstantUtf8 { bytes } = constant {
                         if bytes == "main" {
-                            return *index;
+                            return index;
                         }
                     }
                 }
@@ -176,7 +201,7 @@ impl Program {
 
     // Returns a slice containing code of method pointed at by `method_index`.
     pub fn code(&self, method_index: usize) -> &[u8] {
-        &self.methods[&method_index].code
+        &self.methods[method_index].code
     }
 
     // Parse constant method types, returns a tuple of argument types and
@@ -347,7 +372,7 @@ mod tests {
 
         for method in methods {
             let name_index = method._name_index;
-            let program_method = &program.methods[&(name_index as usize)];
+            let program_method = &program.methods[name_index as usize];
             assert_eq!(method.code, program_method.code);
         }
         assert_eq!(program.entry_point(), 27);

@@ -174,6 +174,14 @@ This was recorded without debug prints and show that we spend a lot of time in
 `fetch` this was due to using a `HashMap` for recording code sections in the JVM
 class file.
 
+The first thing that came to mind was to switch to using a `Vec` this improved
+perf quite a bit and we went from spending 37% of the time in `fetch` to about
+4%. Now the biggest bottleneck was the `JitCache::compile` function (but since
+we try and compile everything) this was quite expected. Once we change how often
+we compile we can build and stitch larger traces.
+
+![Flamegraph after using Vec instead of HashMap](./perf/flamegraph-fetch-improv-nostdout.svg)
+
 ## Acknowledgments
 
 I would like to thank the authors of the TigerShrimp work and for providing

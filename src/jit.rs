@@ -178,17 +178,17 @@ impl JitCache {
                     };
                 }
 
-                println!("Found a native trace @ {pc}");
+                // println!("Found a native trace @ {pc}");
                 let entry = trace.0;
                 let buf = &trace.1;
                 let execute: fn(*mut i32, *const i32) =
                     unsafe { std::mem::transmute(buf.ptr(entry)) };
 
-                println!("Executing native trace");
+                // println!("Executing native trace");
                 unsafe {
                     execute(locals.as_mut_ptr(), exits.as_ptr());
                 }
-                println!("Done executing native trace");
+                // println!("Done executing native trace");
             }
         }
         pc
@@ -257,7 +257,7 @@ impl JitCache {
                 | OPCode::ILoad1
                 | OPCode::ILoad2
                 | OPCode::ILoad3 => {
-                    println!("Compiling an ILoad");
+                    // println!("Compiling an ILoad");
                     let value = match trace.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
                         _ => todo!(),
@@ -265,7 +265,7 @@ impl JitCache {
                     let dst = self.first_available_register();
                     match dst {
                         Operand::Register(dst) => {
-                            println!("Using {:?} as destination register", dst);
+                            // println!("Using {:?} as destination register", dst);
                             dynasm!(ops
                                 ; mov Rq(dst as u8), [rdi + 8 * value]
                             );
@@ -281,11 +281,11 @@ impl JitCache {
         // Epilogue for dynamically compiled code.
         epilogue!(ops);
 
-        println!("Compiled trace @ {pc}");
+        // println!("Compiled trace @ {pc}");
         let buf = ops.finalize().unwrap();
         let native_trace = NativeTrace(offset, buf);
         self.traces.insert(pc, native_trace);
-        println!("Added trace to native traces");
+        // println!("Added trace to native traces");
     }
 
     /// Emit a load operation, where `dst` must be a register and `src` a memory
@@ -303,7 +303,6 @@ impl JitCache {
 
     /// Returns the first available register.
     fn first_available_register(&mut self) -> Operand {
-        println!("Get available register => queue : {:?}", self.registers);
         if !self.registers.is_empty() {
             let reg = self.registers.pop_front().unwrap();
             Operand::Register(reg)
