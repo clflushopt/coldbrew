@@ -1,11 +1,11 @@
 //! JVM runtime module responsible for creating a new runtime
 //! environment and running programs.
 use crate::bytecode::OPCode;
-use crate::jvm::CPInfo;
-use crate::program::{BaseTypeKind, Program};
 use crate::jit;
-use crate::trace;
+use crate::jvm::CPInfo;
 use crate::profiler;
+use crate::program::{BaseTypeKind, Program};
+use crate::trace;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -278,10 +278,10 @@ impl Default for ProgramCounter {
 /// Frames are used to store data and partial results within a method's scope.
 /// Each frame has an operand stack and array of local variables.
 #[derive(Debug, Clone)]
-struct Frame {
+pub struct Frame {
     pc: ProgramCounter,
     stack: Vec<Value>,
-    locals: HashMap<usize, Value>,
+    pub locals: HashMap<usize, Value>,
 }
 
 impl Frame {
@@ -379,7 +379,8 @@ impl Runtime {
                 // If we have a native trace at this pc run it
                 // and capture the return value which is the next
                 // pc to execute.
-                let cont_pc = self.jit_cache.execute(pc);
+                let mut frame = self.frames.last().unwrap().clone();
+                let cont_pc = self.jit_cache.execute(pc, &mut frame);
                 println!("Exiting the Jit @ {pc}");
             }
             self.eval(&inst)?

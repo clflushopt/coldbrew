@@ -2,8 +2,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::bytecode::OPCode;
-use crate::runtime::ProgramCounter;
-use crate::runtime::Value;
+use crate::runtime::{Frame, ProgramCounter, Value};
 use crate::trace::Recording;
 
 use dynasmrt::components::LitPool;
@@ -31,7 +30,7 @@ enum Register {
     Rdi,
     Rsi,
     Rbp,
-    Rcsp,
+    Rsp,
     R8,
     R9,
     R10,
@@ -103,9 +102,21 @@ impl Default for JitCache {
 }
 
 impl JitCache {
-    // Create a new JIT compilation cache.
+    /// Create a new JIT compilation cache.
     pub fn new() -> Self {
-        let registers = vec![];
+        let registers = vec![
+            Register::Rax,
+            Register::Rcx,
+            Register::R8,
+            Register::R9,
+            Register::R10,
+            Register::R11,
+            Register::Rbx,
+            Register::R12,
+            Register::R13,
+            Register::R14,
+            Register::R15,
+        ];
         JitCache {
             registers: VecDeque::from(registers),
             traces: HashMap::new(),
@@ -113,19 +124,70 @@ impl JitCache {
         }
     }
 
-    // Execute the trace at `pc` and return the mutated locals for the frame
-    // and the program counter where the runtime should continue execution.
-    pub fn execute(&mut self, pc: ProgramCounter) -> ProgramCounter {
+    /// Reset Jit state.
+    fn reset(&mut self) {
+        let registers = vec![
+            Register::Rax,
+            Register::Rcx,
+            Register::R8,
+            Register::R9,
+            Register::R10,
+            Register::R11,
+            Register::Rbx,
+            Register::R12,
+            Register::R13,
+            Register::R14,
+            Register::R15,
+        ];
+        self.registers.clear();
+        self.registers = VecDeque::from(registers);
+        self.operands.clear();
+    }
+
+    /// Execute the trace at `pc` and return the mutated locals for the frame
+    /// and the program counter where the runtime should continue execution.
+    ///
+    /// Ideally we can just return the update `locals` and exit but for now
+    /// let's take in the entire execution frame of VM and update it.
+    ///
+    /// Following the x86-64 convention the locals are passed in `rdi`, exit
+    /// information is passed in `rsi`.
+    pub fn execute(
+        &mut self,
+        pc: ProgramCounter,
+        frame: &mut Frame,
+    ) -> ProgramCounter {
         if self.traces.contains_key(&pc) {
             // execute the assembled trace.
-            if let trace = self.traces.get_mut(&pc).expect("Expected a native trace @ {pc}") {
+            if let trace = self
+                .traces
+                .get_mut(&pc)
+                .expect("Expected a native trace @ {pc}")
+            {
+                // Flatten the locals `HashMap` into a `i32` slice.
+                let mut locals = vec![0i32; 4096];
+                // Exit information, for now is empty.
+                let exits = vec![0i32; 4096];
+
+                for (key, val) in frame.locals.iter() {
+                    locals[*key] = match val {
+                        Value::Int(x) => *x,
+                        Value::Long(x) => *x as i32,
+                        Value::Float(x) => *x as i32,
+                        Value::Double(x) => *x as i32,
+                    };
+                }
+
                 println!("Found a native trace @ {pc}");
                 let entry = trace.0;
                 let buf = &trace.1;
-                let execute: fn() = unsafe { std::mem::transmute(buf.ptr(entry)) };
+                let execute: fn(*mut i32, *const i32) =
+                    unsafe { std::mem::transmute(buf.ptr(entry)) };
 
                 println!("Executing native trace");
-                execute();
+                unsafe {
+                    execute(locals.as_mut_ptr(), exits.as_ptr());
+                }
                 println!("Done executing native trace");
             }
         }
@@ -137,50 +199,49 @@ impl JitCache {
         self.traces.contains_key(&pc)
     }
 
-    // Compile the trace given as argument and prepare a native trace
-    // for execution.
-    //
-    // This is the tracelet JIT version where we only compile basic blocks
-    // and exit skip all control flow opcodes.
-    //
-    // Labels:
-    //
-    // ```
-    // let label = new_dynamic_label()
-    // labels.insert(pc, label) ; binds a label to a program counter.
-    //
-    // if labels.contains(pc):
-    //  // Bind the label to the current offset
-    //  define_dynamic(labels.get(pc), ops.offset())
-    // ```
-    // continue compiling
-    //
-    // Compile works as follows :
-    // 1. Build a dynasmrt Assembler object.
-    // 2. Emits a static prologue for the jitted code.
-    // 3. For each instruction in the trace generate its equivalent arm64
-    // 4. Emits a static epilogue for the jitted code.
-    // 5. When a trace recording is looked, assemble and run the jitted code.
-    //
-    // There are a few details we want to fix before hand :
-    // - We need to define a calling convention for our JIT i.e where do
-    // arguments go and what are the scratch space registers.
-    // - We need to keep track of the traces we record and when we stitch them
-    // i.e book-keeping `pc`, offsets and other stuff.
-    //
-    // When we run the trace we need to return PC at which the interpreter
-    // will continue execution (`reentry_pc`)
-    //
-    // We need to load local variables into an array let's call it `local_vars`
-    // speaking of calling convention, when we load a local we need a way to
-    // to translate the existing locals load from JVM bytecode to a load in
-    // `local_var` if we assume that r10 will be the base register where we
-    // set `local_vars` and we want to access local at index 3 then the we
-    // can setup a memory load then store using `r13 + 3 * 8`.
-    pub fn compile(
-        &mut self,
-        recording: &Recording,
-    )  {
+    /// Compile the trace given as argument and prepare a native trace
+    /// for execution.
+    ///
+    /// This is the tracelet JIT version where we only compile basic blocks
+    /// and exit skip all control flow opcodes.
+    ///
+    /// Labels:
+    ///
+    ///
+    /// let label = new_dynamic_label()
+    /// labels.insert(pc, label) ; binds a label to a program counter.
+    ///
+    /// if labels.contains(pc):
+    ///  // Bind the label to the current offset
+    ///  define_dynamic(labels.get(pc), ops.offset())
+    ///
+    /// continue compiling
+    ///
+    /// Compile works as follows :
+    /// 1. Build a dynasmrt Assembler object.
+    /// 2. Emits a static prologue for the jitted code.
+    /// 3. For each instruction in the trace generate its equivalent arm64
+    /// 4. Emits a static epilogue for the jitted code.
+    /// 5. When a trace recording is looked, assemble and run the jitted code.
+    ///
+    /// There are a few details we want to fix before hand :
+    /// - We need to define a calling convention for our JIT i.e where do
+    /// arguments go and what are the scratch space registers.
+    /// - We need to keep track of the traces we record and when we stitch them
+    /// i.e book-keeping `pc`, offsets and other stuff.
+    ///
+    /// When we run the trace we need to return PC at which the interpreter
+    /// will continue execution (`reentry_pc`)
+    ///
+    /// We need to load local variables into an array let's call it `local_vars`
+    /// speaking of calling convention, when we load a local we need a way to
+    /// to translate the existing locals load from JVM bytecode to a load in
+    /// `local_var` if we assume that r10 will be the base register where we
+    /// set `local_vars` and we want to access local at index 3 then the we
+    /// can setup a memory load then store using `r13 + 3 * 8`.
+    pub fn compile(&mut self, recording: &Recording) {
+        // Reset Jit state.
+        self.reset();
         let pc = recording.start;
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
         // Prologue for dynamically compiled code.
@@ -189,14 +250,33 @@ impl JitCache {
         // For now we compile only the prologue and epilogue and ensure that
         // entering the Jit executing the assembled code and leaving the Jit
         // works correct.
-        /*
         for trace in &recording.trace {
             match trace.instruction().get_mnemonic() {
-                _ => todo!(),
+                OPCode::ILoad
+                | OPCode::ILoad0
+                | OPCode::ILoad1
+                | OPCode::ILoad2
+                | OPCode::ILoad3 => {
+                    println!("Compiling an ILoad");
+                    let value = match trace.instruction().nth(0) {
+                        Some(Value::Int(x)) => x,
+                        _ => todo!(),
+                    };
+                    let dst = self.first_available_register();
+                    match dst {
+                        Operand::Register(dst) => {
+                            println!("Using {:?} as destination register", dst);
+                            dynasm!(ops
+                                ; mov Rq(dst as u8), [rdi + 8 * value]
+                            );
+                        }
+                        _ => todo!(),
+                    }
+                    self.operands.push(dst);
+                }
+                _ => (),
             }
         }
-        */
-
 
         // Epilogue for dynamically compiled code.
         epilogue!(ops);
@@ -208,22 +288,20 @@ impl JitCache {
         println!("Added trace to native traces");
     }
 
-    // Emit a load operation, where `dst` must be a register and `src` a memory
-    // address.
+    /// Emit a load operation, where `dst` must be a register and `src` a memory
+    /// address.
     fn emit_load(&mut self, ops: &mut Assembler, dst: &Operand, src: &Operand) {
     }
 
-    // Emit a move operation, this includes all data movement operations
-    // register to register and immediate to register.
-    // For memory accesses we follow the aarch64 story of generating all
-    // necessary stores and loads.
+    /// Emit a move operation, this includes all data movement operations
+    /// register to register and immediate to register.
     fn emit_mov(&mut self, ops: &mut Assembler, dst: &Operand, src: &Operand) {}
 
-    // Emit an arithmetic operation, covers all simple instructions such as
-    // `add`, `mul` and `sub`.
+    /// Emit an arithmetic operation, covers all simple instructions such as
+    /// `add`, `mul` and `sub`.
     fn emit_arithmetic(&mut self, ops: &mut Assembler) {}
 
-    // Returns the first available register.
+    /// Returns the first available register.
     fn first_available_register(&mut self) -> Operand {
         println!("Get available register => queue : {:?}", self.registers);
         if !self.registers.is_empty() {
@@ -234,7 +312,7 @@ impl JitCache {
         }
     }
 
-    // Free the top most register in the operand stack.
+    /// Free the top most register in the operand stack.
     fn free_register(&mut self) -> Option<Operand> {
         let op = self.operands.pop();
 
