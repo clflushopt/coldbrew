@@ -1,8 +1,9 @@
 //! JVM runtime module responsible for creating a new runtime
 //! environment and running programs.
 use crate::bytecode::OPCode;
+use crate::jit;
 use crate::jvm::CPInfo;
-use crate::profiler::Profiler;
+use crate::profiler;
 use crate::program::{BaseTypeKind, Program};
 use crate::trace;
 
@@ -277,10 +278,10 @@ impl Default for ProgramCounter {
 /// Frames are used to store data and partial results within a method's scope.
 /// Each frame has an operand stack and array of local variables.
 #[derive(Debug, Clone)]
-struct Frame {
+pub struct Frame {
     pc: ProgramCounter,
     stack: Vec<Value>,
-    locals: HashMap<usize, Value>,
+    pub locals: HashMap<usize, Value>,
 }
 
 impl Frame {
@@ -323,12 +324,13 @@ pub struct Runtime {
     program: Program,
     // Stack frames.
     frames: Vec<Frame>,
-    // Trace profiling statistics, indexed by the program counter
-    // where each trace starts.
+    // Trace recorder.
     pub recorder: trace::Recorder,
-    profiler: Profiler,
-    // traces: Vec<Trace>,
-    // used to store return values
+    // Execution profiler.
+    profiler: profiler::Profiler,
+    // Jit cache.
+    jit_cache: jit::JitCache,
+    // Used to store return values of the VM.
     return_values: Vec<Value>,
 }
 
@@ -350,7 +352,8 @@ impl Runtime {
             program,
             frames: vec![initial_frame],
             recorder: trace::Recorder::new(),
-            profiler: Profiler::new(),
+            profiler: profiler::Profiler::new(),
+            jit_cache: jit::JitCache::new(),
             return_values: vec![],
         }
     }
@@ -366,11 +369,24 @@ impl Runtime {
             }
             if self.recorder.is_recording() {
                 self.recorder.record(pc, inst.clone());
+                // TODO: Clean up the naming on trace recoder implementation.
+                let recorded_trace = self.recorder.recording();
+                // Compile recorded trace.
+                self.jit_cache.compile(&recorded_trace);
+            }
+            if self.jit_cache.has_native_trace(pc) {
+                println!("Entering the Jit @ {pc}");
+                // If we have a native trace at this pc run it
+                // and capture the return value which is the next
+                // pc to execute.
+                let mut frame = self.frames.last().unwrap().clone();
+                let cont_pc = self.jit_cache.execute(pc, &mut frame);
+                println!("Exiting the Jit @ {pc}");
             }
             self.eval(&inst)?
         }
 
-        let _ = self.recorder.debug();
+        // let _ = self.recorder.debug();
         Ok(())
     }
 

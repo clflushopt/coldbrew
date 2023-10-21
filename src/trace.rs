@@ -27,7 +27,7 @@ impl RecordEntry {
 
 #[derive(Debug, Clone)]
 pub struct Recording {
-    start: ProgramCounter,
+    pub start: ProgramCounter,
     pub trace: Vec<RecordEntry>,
     inner_branch_targets: HashSet<ProgramCounter>,
     outer_branch_targets: HashSet<ProgramCounter>,
@@ -136,7 +136,7 @@ impl Recorder {
                 if self.trace_start.get_method_index() == method_index as usize
                 {
                     self.is_recording = false;
-                    println!("Found recursive call -- abort recording");
+                    // println!("Found recursive call -- abort recording");
                     return;
                 }
             }
@@ -311,7 +311,7 @@ impl Recorder {
         );
         branch_target.inc_instruction_index(offset);
         if branch_target == pc {
-            println!("Flipping branch @ {}", branch_entry.inst.get_mnemonic());
+            // println!("Flipping branch @ {}", branch_entry.inst.get_mnemonic());
             offset = 3;
             branch_target = branch_entry.pc;
             branch_target.inc_instruction_index(offset);

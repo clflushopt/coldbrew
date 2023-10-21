@@ -6,3 +6,4 @@ pub mod profiler;
 pub mod program;
 pub mod runtime;
 pub mod trace;
+pub mod x86;
