@@ -359,7 +359,12 @@ impl Runtime {
     }
 
     pub fn run(&mut self) -> Result<(), RuntimeError> {
-        while !self.frames.is_empty() {
+        'next_inst: loop {
+            // No more frames, exit.
+            if self.frames.is_empty() {
+                break;
+            }
+            // Fetch the next instruction.
             let inst = self.fetch();
             let pc = self.frames.last().unwrap().pc;
             self.profiler.count_entry(&pc);
@@ -382,10 +387,11 @@ impl Runtime {
                 let mut frame = self.frames.last().unwrap().clone();
                 let cont_pc = self.jit_cache.execute(pc, &mut frame);
                 // println!("Exiting the Jit @ {pc}");
+                // Continue execution with updated PC.
+                // break `next_inst
             }
             self.eval(&inst)?
         }
-
         // let _ = self.recorder.debug();
         Ok(())
     }

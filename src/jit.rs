@@ -239,6 +239,21 @@ impl JitCache {
     /// `local_var` if we assume that r10 will be the base register where we
     /// set `local_vars` and we want to access local at index 3 then the we
     /// can setup a memory load then store using `r13 + 3 * 8`.
+    ///
+    /// Solving the exit problem :
+    /// 1. At each trace.instruction()
+    ///     1.1 Create a DynasmLabel `inst_label_{pc}`
+    ///     1.2 Append the new label to the `global_jump_table`
+    /// 2. If the trace.instruction() is a branch:
+    ///     1.1 Check if we have an existing entry in the `global_jump_table`.
+    ///     1.2 If an entry exists it means we've compiled a trace for this block.
+    ///         1.2.1 Fetch the label and mark the native trace with this label
+    ///         the trace will either be stitched if the jump is outside this trace
+    ///         or it will be local if it is inside this trace.
+    ///     1.3 If an entry doesn't exists it means we're exiting the JIT so we
+    ///     preserve the target `pc` in `rax` and return, when calling `execute`
+    ///     we will either jump to another trace and continue executing or exit
+    ///     the JIT where we update the `pc` and transfer control back to the JIT.
     pub fn compile(&mut self, recording: &Recording) {
         // Reset Jit state.
         self.reset();
