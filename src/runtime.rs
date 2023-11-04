@@ -379,7 +379,6 @@ impl Runtime {
                 // Compile recorded trace.
                 self.jit_cache.compile(&recorded_trace);
             }
-            #[cfg(target_arch = "x86_64")]
             if self.jit_cache.has_native_trace(pc) {
                 // println!("Entering the Jit @ {pc}");
                 // If we have a native trace at this pc run it

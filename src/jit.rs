@@ -59,9 +59,9 @@ enum Operand {
 /// though they might not be all used.
 macro_rules! prologue {
     ($ops:ident) => {{
-        let start = $ops.offset();
         #[cfg(target_arch = "x86_64")]
         {
+        let start = $ops.offset();
         dynasm!($ops
             ; push rbp
             ; mov rbp, rsp
@@ -72,10 +72,11 @@ macro_rules! prologue {
         }
         #[cfg(target_arch = "aarch64")]
         {
+        let start = $ops.offset();
         dynasm!($ops
-            ; str x30, [sp, #-16]!
-            ; stp x0, x1, [sp, #-16]!
-            ; stp x2, x3, [sp, #-32]!
+            ; sub sp, sp, #32
+            ; str x0, [sp, 8]
+            ; str x1, [sp]
         );
         start
         }
@@ -93,13 +94,9 @@ macro_rules! epilogue {
 
 #[cfg(target_arch = "aarch64")]
     dynasm!($ops
-        // Load return value that we assume
-        // is the third stack variable.
-        ; ldr w0, [sp, #12]
         // Increment stack pointer to go back to where we were
         // before the function call.
         ; add sp, sp, #32
-        ; ldr x30, [sp], #16
         ; ret
     );
     };
@@ -209,11 +206,11 @@ impl JitCache {
             let execute: fn(*mut i32, *const i32) =
                 unsafe { std::mem::transmute(buf.ptr(entry)) };
 
-            // println!("Executing native trace");
+            println!("Executing native trace");
             unsafe {
                 execute(locals.as_mut_ptr(), exits.as_ptr());
             }
-            // println!("Done executing native trace");
+            println!("Done executing native trace");
         }
         pc
     }
