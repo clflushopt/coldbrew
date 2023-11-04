@@ -388,7 +388,6 @@ impl Runtime {
                 let cont_pc = self.jit_cache.execute(pc, &mut frame);
                 // println!("Exiting the Jit @ {pc}");
                 // Continue execution with updated PC.
-                // break `next_inst
             }
             self.eval(&inst)?
         }

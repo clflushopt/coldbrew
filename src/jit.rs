@@ -206,11 +206,11 @@ impl JitCache {
             let execute: fn(*mut i32, *const i32) =
                 unsafe { std::mem::transmute(buf.ptr(entry)) };
 
-            println!("Executing native trace");
+            // println!("Executing native trace");
             unsafe {
                 execute(locals.as_mut_ptr(), exits.as_ptr());
             }
-            println!("Done executing native trace");
+            // println!("Done executing native trace");
         }
         pc
     }
