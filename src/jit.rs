@@ -5,7 +5,6 @@ use crate::bytecode::OPCode;
 use crate::runtime::{Frame, ProgramCounter, Value};
 use crate::trace::Recording;
 
-use dynasmrt::components::LitPool;
 use dynasmrt::dynasm;
 use dynasmrt::x64::Assembler;
 use dynasmrt::{AssemblyOffset, DynasmApi, ExecutableBuffer};
@@ -41,7 +40,8 @@ enum Register {
     R15,
 }
 
-/// Operands.
+/// Generic representation of assembly operands that allows for supporting
+/// both x86 and ARM64.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum Operand {
     // Register operands.
@@ -57,10 +57,11 @@ enum Operand {
 
 /// x86_64 functioe prologue, allocates `max_locals` space on the stack even
 /// though they might not be all used.
-#[cfg(target_arch = "x86_64")]
 macro_rules! prologue {
     ($ops:ident) => {{
         let start = $ops.offset();
+        #[cfg(target_arch = "x86_64")]
+        {
         dynasm!($ops
             ; push rbp
             ; mov rbp, rsp
@@ -68,16 +69,40 @@ macro_rules! prologue {
             ; mov QWORD [rbp-16], rsi
         );
         start
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+        dynasm!($ops
+            ; str x30, [sp, #-16]!
+            ; stp x0, x1, [sp, #-16]!
+            ; stp x2, x3, [sp, #-32]!
+        );
+        start
+        }
     }};
 }
 
 /// aarch64 function epilogue.
-#[cfg(target_arch = "x86_64")]
 macro_rules! epilogue {
-    ($ops:ident) => {dynasm!($ops
-        ; pop rbp
+    ($ops:ident) => {
+        #[cfg(target_arch = "x86_64")]
+        dynasm!($ops
+            ; pop rbp
+            ; ret
+        );
+
+#[cfg(target_arch = "aarch64")]
+    dynasm!($ops
+        // Load return value that we assume
+        // is the third stack variable.
+        ; ldr w0, [sp, #12]
+        // Increment stack pointer to go back to where we were
+        // before the function call.
+        ; add sp, sp, #32
+        ; ldr x30, [sp], #16
         ; ret
-    );};
+    );
+    };
 }
 
 /// `NativeTrace` is a pair of `usize` and `Assembler` that represents an entry
@@ -159,37 +184,36 @@ impl JitCache {
     ) -> ProgramCounter {
         if self.traces.contains_key(&pc) {
             // execute the assembled trace.
-            if let trace = self
+            let trace = self
                 .traces
                 .get_mut(&pc)
-                .expect("Expected a native trace @ {pc}")
-            {
-                // Flatten the locals `HashMap` into a `i32` slice.
-                let mut locals = vec![0i32; 4096];
-                // Exit information, for now is empty.
-                let exits = vec![0i32; 4096];
+                .expect("Expected a native trace @ {pc}");
 
-                for (key, val) in frame.locals.iter() {
-                    locals[*key] = match val {
-                        Value::Int(x) => *x,
-                        Value::Long(x) => *x as i32,
-                        Value::Float(x) => *x as i32,
-                        Value::Double(x) => *x as i32,
-                    };
-                }
+            // Flatten the locals `HashMap` into a `i32` slice.
+            let mut locals = vec![0i32; 4096];
+            // Exit information, for now is empty.
+            let exits = vec![0i32; 4096];
 
-                // println!("Found a native trace @ {pc}");
-                let entry = trace.0;
-                let buf = &trace.1;
-                let execute: fn(*mut i32, *const i32) =
-                    unsafe { std::mem::transmute(buf.ptr(entry)) };
-
-                // println!("Executing native trace");
-                unsafe {
-                    execute(locals.as_mut_ptr(), exits.as_ptr());
-                }
-                // println!("Done executing native trace");
+            for (key, val) in frame.locals.iter() {
+                locals[*key] = match val {
+                    Value::Int(x) => *x,
+                    Value::Long(x) => *x as i32,
+                    Value::Float(x) => *x as i32,
+                    Value::Double(x) => *x as i32,
+                };
             }
+
+            // println!("Found a native trace @ {pc}");
+            let entry = trace.0;
+            let buf = &trace.1;
+            let execute: fn(*mut i32, *const i32) =
+                unsafe { std::mem::transmute(buf.ptr(entry)) };
+
+            // println!("Executing native trace");
+            unsafe {
+                execute(locals.as_mut_ptr(), exits.as_ptr());
+            }
+            // println!("Done executing native trace");
         }
         pc
     }
@@ -267,6 +291,8 @@ impl JitCache {
         // works correct.
         for trace in &recording.trace {
             match trace.instruction().get_mnemonic() {
+                // Load operation loads a constant from the locals array at
+                // the position given by the opcode's operand.
                 OPCode::ILoad
                 | OPCode::ILoad0
                 | OPCode::ILoad1
@@ -281,9 +307,12 @@ impl JitCache {
                     match dst {
                         Operand::Register(dst) => {
                             // println!("Using {:?} as destination register", dst);
+                            #[cfg(target_arch = "x86_64")]
                             dynasm!(ops
                                 ; mov Rq(dst as u8), [rdi + 8 * value]
                             );
+                            #[cfg(target_arch = "aarch64")]
+                            dynasm!(ops);
                         }
                         _ => todo!(),
                     }
@@ -342,12 +371,6 @@ impl JitCache {
 
 #[cfg(test)]
 mod tests {
-
-    use super::*;
-    use dynasmrt::dynasm;
-    use dynasmrt::{DynasmApi, ExecutableBuffer};
-    use std::slice;
-
     #[test]
     fn can_jit_load_and_store_opcodes() {}
 }

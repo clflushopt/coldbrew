@@ -18,7 +18,8 @@ macro_rules! prologue {
 /// aarch64 function epilogue.
 #[cfg(target_arch = "aarch64")]
 macro_rules! epilogue {
-    ($ops:ident) => {dynasm!($ops
+    ($ops:ident) => {
+    dynasm!($ops
         // Load return value that we assume
         // is the third stack variable.
         ; ldr w0, [sp, #12]
@@ -27,7 +28,8 @@ macro_rules! epilogue {
         ; add sp, sp, #32
         ; ldr x30, [sp], #16
         ; ret
-    );};
+    );
+    };
 }
 
 /// ARM64 (aarch64) registers, mainly used to keep track of available
