@@ -1,37 +1,5 @@
 //! Minimal ARM64 assembly module useful for doing ARM64 codegen.
 
-/// aarch64 function prologue, allocates `max_locals` space on the stack even
-/// though they might not be all used.
-#[cfg(target_arch = "aarch64")]
-macro_rules! prologue {
-    ($ops:ident) => {{
-        let start = $ops.offset();
-        dynasm!($ops
-            ; str x30, [sp, #-16]!
-            ; stp x0, x1, [sp, #-16]!
-            ; stp x2, x3, [sp, #-32]!
-        );
-        start
-    }};
-}
-
-/// aarch64 function epilogue.
-#[cfg(target_arch = "aarch64")]
-macro_rules! epilogue {
-    ($ops:ident) => {
-    dynasm!($ops
-        // Load return value that we assume
-        // is the third stack variable.
-        ; ldr w0, [sp, #12]
-        // Increment stack pointer to go back to where we were
-        // before the function call.
-        ; add sp, sp, #32
-        ; ldr x30, [sp], #16
-        ; ret
-    );
-    };
-}
-
 /// ARM64 (aarch64) registers, mainly used to keep track of available
 /// and used registers during compilation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
