@@ -226,18 +226,6 @@ impl JitCache {
     /// This is the tracelet JIT version where we only compile basic blocks
     /// and exit skip all control flow opcodes.
     ///
-    /// Labels:
-    ///
-    ///
-    /// let label = new_dynamic_label()
-    /// labels.insert(pc, label) ; binds a label to a program counter.
-    ///
-    /// if labels.contains(pc):
-    ///  // Bind the label to the current offset
-    ///  define_dynamic(labels.get(pc), ops.offset())
-    ///
-    /// continue compiling
-    ///
     /// Compile works as follows :
     /// 1. Build a dynasmrt Assembler object.
     /// 2. Emits a static prologue for the jitted code.
@@ -245,21 +233,8 @@ impl JitCache {
     /// 4. Emits a static epilogue for the jitted code.
     /// 5. When a trace recording is looked, assemble and run the jitted code.
     ///
-    /// There are a few details we want to fix before hand :
-    /// - We need to define a calling convention for our JIT i.e where do
-    /// arguments go and what are the scratch space registers.
-    /// - We need to keep track of the traces we record and when we stitch them
-    /// i.e book-keeping `pc`, offsets and other stuff.
-    ///
     /// When we run the trace we need to return PC at which the interpreter
     /// will continue execution (`reentry_pc`)
-    ///
-    /// We need to load local variables into an array let's call it `local_vars`
-    /// speaking of calling convention, when we load a local we need a way to
-    /// to translate the existing locals load from JVM bytecode to a load in
-    /// `local_var` if we assume that r10 will be the base register where we
-    /// set `local_vars` and we want to access local at index 3 then the we
-    /// can setup a memory load then store using `r13 + 3 * 8`.
     ///
     /// Solving the exit problem :
     /// 1. At each trace.instruction()
