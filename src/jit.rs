@@ -23,13 +23,13 @@ use dynasmrt::{AssemblyOffset, DynasmApi, ExecutableBuffer};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Register {
     Rax,
-    Rbx,
     Rcx,
     Rdx,
-    Rdi,
-    Rsi,
-    Rbp,
+    Rbx,
     Rsp,
+    Rbp,
+    Rsi,
+    Rdi,
     R8,
     R9,
     R10,
@@ -85,21 +85,22 @@ macro_rules! prologue {
 
 /// aarch64 function epilogue.
 macro_rules! epilogue {
-    ($ops:ident) => {
+    ($ops:ident) => {{
+        let epilogue = $ops.offset();
         #[cfg(target_arch = "x86_64")]
         dynasm!($ops
             ; pop rbp
             ; ret
         );
-
-#[cfg(target_arch = "aarch64")]
-    dynasm!($ops
-        // Increment stack pointer to go back to where we were
-        // before the function call.
-        ; add sp, sp, #32
-        ; ret
-    );
-    };
+        #[cfg(target_arch = "aarch64")]
+        dynasm!($ops
+            // Increment stack pointer to go back to where we were
+            // before the function call.
+            ; add sp, sp, #32
+            ; ret
+        );
+        epilogue
+    }};
 }
 
 /// `NativeTrace` is a pair of `usize` and `Assembler` that represents an entry
@@ -258,29 +259,27 @@ impl JitCache {
             match entry.instruction().get_mnemonic() {
                 // Load operation loads a constant from the locals array at
                 // the position given by the opcode's operand.
+                //
+                // Since the locals array is the first argument to our JIT
+                // `execute` function the value can be fetched from memory
+                // using base addressing.
+                // We assume (for now) locals are 8 bytes long.
                 OPCode::ILoad
                 | OPCode::ILoad0
                 | OPCode::ILoad1
                 | OPCode::ILoad2
                 | OPCode::ILoad3 => {
-                    // println!("Compiling an ILoad");
+                    println!("Compiling an ILoad");
                     let value = match entry.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
                         _ => todo!(),
                     };
                     let dst = self.first_available_register();
-                    match dst {
-                        Operand::Register(dst) => {
-                            // println!("Using {:?} as destination register", dst);
-                            #[cfg(target_arch = "x86_64")]
-                            dynasm!(ops
-                                ; mov Rq(dst as u8), [rdi + 8 * value]
-                            );
-                            #[cfg(target_arch = "aarch64")]
-                            dynasm!(ops);
-                        }
-                        _ => todo!(),
-                    }
+                    Self::emit_load(
+                        &mut ops,
+                        &dst,
+                        &Operand::Memory(Register::Rdi, 8 * value),
+                    );
                     self.operands.push(dst);
                 }
                 _ => (),
@@ -299,7 +298,29 @@ impl JitCache {
 
     /// Emit a load operation, where `dst` must be a register and `src` a memory
     /// address.
-    fn emit_load(&mut self, ops: &mut Assembler, dst: &Operand, src: &Operand) {
+    fn emit_load(ops: &mut Assembler, dst: &Operand, src: &Operand) {
+        match (dst, src) {
+            (Operand::Register(dst), Operand::Memory(base, offset)) => {
+                // println!("Using {:?} as destination register", dst);
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                    ; mov Rq(*dst as u8), [Rq(*base as u8) + *offset]
+                );
+            }
+            (Operand::Register(dst), Operand::Immediate(value)) => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                    ;mov Rq(*dst as u8), *value
+                );
+            }
+            (Operand::Register(dst), Operand::Register(src)) => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                    ; mov Rq(*dst as u8), Rq(*src as u8)
+                );
+            }
+            _ => todo!(),
+        }
     }
 
     /// Emit a move operation, this includes all data movement operations
@@ -347,6 +368,31 @@ impl JitCache {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::io::Write;
+
+    use crate::jit;
+    use dynasmrt::dynasm;
+    use dynasmrt::DynasmApi;
+
+    use super::JitCache;
+    use super::Operand;
+    use super::Register;
     #[test]
-    fn can_jit_load_and_store_opcodes() {}
+    fn can_emit_loads() {
+        let mut ops = dynasmrt::x64::Assembler::new().unwrap();
+        let prologue = prologue!(ops);
+        JitCache::emit_load(
+            &mut ops,
+            &Operand::Register(Register::Rax),
+            &Operand::Memory(Register::Rdi, 1),
+        );
+        let epilogue = epilogue!(ops);
+
+        ops.finalize().and_then(|buf| {
+            let mut testfile = File::create("test.bin").unwrap();
+            testfile.write_all(&buf.to_vec());
+            Ok(buf)
+        });
+    }
 }
