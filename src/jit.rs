@@ -65,8 +65,8 @@ macro_rules! prologue {
         dynasm!($ops
             ; push rbp
             ; mov rbp, rsp
-            ; mov QWORD [rbp-8], rdi
-            ; mov QWORD [rbp-16], rsi
+            ; mov QWORD [rbp-24], rdi
+            ; mov QWORD [rbp-32], rsi
         );
         start
         }
