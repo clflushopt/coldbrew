@@ -282,7 +282,14 @@ impl JitCache {
                     );
                     self.operands.push(dst);
                 }
-                _ => (),
+                OPCode::IAdd => {
+                    println!("Compiling an IAdd");
+                    Self::emit_arithmetic(self, &mut ops);
+                }
+                _ => println!(
+                    "Found opcode : {:}",
+                    entry.instruction().get_mnemonic()
+                ),
             }
         }
 
@@ -325,11 +332,39 @@ impl JitCache {
 
     /// Emit a move operation, this includes all data movement operations
     /// register to register and immediate to register.
-    fn emit_mov(&mut self, ops: &mut Assembler, dst: &Operand, src: &Operand) {}
+    fn emit_mov(ops: &mut Assembler, dst: &Operand, src: &Operand) {
+        match (dst, src) {
+            (Operand::Register(dst), Operand::Register(src)) => {
+                dynasm!(ops
+                    ;mov Rq(*dst as u8), Rq(*src as u8)
+                );
+            }
+            _ => todo!(),
+        }
+    }
 
     /// Emit an arithmetic operation, covers all simple instructions such as
     /// `add`, `mul` and `sub`.
-    fn emit_arithmetic(&mut self, ops: &mut Assembler) {}
+    fn emit_arithmetic(&mut self, ops: &mut Assembler) {
+        let rhs = match self.operands.pop() {
+            Some(rhs) => rhs,
+            None => panic!("expected operand found None"),
+        };
+        let lhs = match self.operands.pop() {
+            Some(lhs) => lhs,
+            None => panic!("expected operand found None"),
+        };
+        let dst = match &rhs {
+            &Operand::Register(reg) => Operand::Register(reg),
+            // TODO: need to mov lhs operand to the first free register.
+            _ => {
+                let dst = self.first_available_register();
+                JitCache::emit_mov(ops, &dst, &lhs);
+                dst
+            }
+        };
+        self.operands.push(dst);
+    }
 
     /// Emit a store operation, the restriction on `dst` and `src` depends on
     /// the underlying architecture's addressing modes. For example in ARM64
@@ -371,28 +406,59 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
 
-    use crate::jit;
     use dynasmrt::dynasm;
     use dynasmrt::DynasmApi;
+    use std::env;
+    use std::path::Path;
 
     use super::JitCache;
     use super::Operand;
     use super::Register;
+    use crate::jvm::read_class_file;
+    use crate::jvm::JVMParser;
+    use crate::program::Program;
+    use crate::runtime::{Runtime, Value};
+
+    macro_rules! run_jit_test_case {
+        ($name: ident, $test_file:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+                let path = Path::new(&env_var).join($test_file);
+                let class_file_bytes =
+                    read_class_file(&path).unwrap_or_else(|_| {
+                        panic!("Failed to parse file : {:?}", path.as_os_str())
+                    });
+                let class_file = JVMParser::parse(&class_file_bytes);
+                assert!(class_file.is_ok());
+                let program = Program::new(&class_file.unwrap());
+                let mut runtime = Runtime::new(program);
+                assert!(runtime.run().is_ok());
+                assert_eq!(runtime.top_return_value(), $expected);
+            }
+        };
+    }
+
     #[test]
     fn can_emit_loads() {
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
-        let prologue = prologue!(ops);
+        let _prologue = prologue!(ops);
         JitCache::emit_load(
             &mut ops,
             &Operand::Register(Register::Rax),
             &Operand::Memory(Register::Rdi, 1),
         );
-        let epilogue = epilogue!(ops);
+        let _epilogue = epilogue!(ops);
 
-        ops.finalize().and_then(|buf| {
+        let _ = ops.finalize().and_then(|buf| {
             let mut testfile = File::create("test.bin").unwrap();
-            testfile.write_all(&buf.to_vec());
+            let _ = testfile.write_all(&buf.to_vec());
             Ok(buf)
         });
     }
+    run_jit_test_case!(
+        loops,
+        "support/tests/Loop.class",
+        Some(Value::Int(1000))
+    );
 }

@@ -1,4 +1,5 @@
 //! Runtime tracing module for coldbrew.
+use core::fmt;
 use std::collections::HashSet;
 use std::fmt::Write;
 
@@ -22,6 +23,12 @@ impl RecordEntry {
 
     pub fn pc(&self) -> ProgramCounter {
         self.pc
+    }
+}
+
+impl fmt::Display for RecordEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:} @ {:}", self.inst, self.pc)
     }
 }
 
