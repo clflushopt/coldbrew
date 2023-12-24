@@ -49,11 +49,13 @@ enum Register {
 }
 
 /// Create a mask to extract n-bits of a given value from start.
+#[cfg(target = "aarch64")]
 pub fn mask(len: u64, start: u64) -> u64 {
     ((1 << len) - 1) << start
 }
 
 /// Split a u64 into two chunks of high and low bits.
+#[cfg(target = "aarch64")]
 pub fn split(x: u64) -> (u32, u32) {
     return ((x >> 16) as u32, (x & mask(16, 0)) as u32);
 }

@@ -318,127 +318,14 @@ impl JVMParser {
         let minor_version = buffer.read_u16::<BigEndian>()?;
         let major_version = buffer.read_u16::<BigEndian>()?;
         // Read the number of constants in the pool.
-        let constant_pool_count = buffer.read_u16::<BigEndian>()?;
-        // Allocate a new pool and populate it with the constants.
-        // let mut constant_pool = Vec::with_capacity(constant_pool_count.into());
-        let mut constant_pool =
-            vec![CPInfo::Unspecified; constant_pool_count as usize];
-        // The first entry in the pool is at index 1 according to JVM
-        // spec.
-        #[allow(unused_assignments)]
-        (1..constant_pool_count as usize).for_each(|mut ii| {
-            let tag = buffer.read_u8().unwrap();
-            match ConstantKind::from(tag) {
-                ConstantKind::Class => {
-                    constant_pool[ii] = CPInfo::ConstantClass {
-                        name_index: buffer.read_u16::<BigEndian>().unwrap(),
-                    };
-                }
-                ConstantKind::FieldRef => {
-                    constant_pool[ii] = CPInfo::ConstantFieldRef {
-                        class_index: buffer.read_u16::<BigEndian>().unwrap(),
-                        name_and_type_index: buffer
-                            .read_u16::<BigEndian>()
-                            .unwrap(),
-                    };
-                }
-                ConstantKind::MethodRef => {
-                    constant_pool[ii] = CPInfo::ConstantMethodRef {
-                        class_index: buffer.read_u16::<BigEndian>().unwrap(),
-                        name_and_type_index: buffer
-                            .read_u16::<BigEndian>()
-                            .unwrap(),
-                    };
-                }
-                ConstantKind::InterfaceMethodRef => {
-                    constant_pool[ii] = CPInfo::ConstantInterfaceMethodRef {
-                        class_index: buffer.read_u16::<BigEndian>().unwrap(),
-                        name_and_type_index: buffer
-                            .read_u16::<BigEndian>()
-                            .unwrap(),
-                    };
-                }
-                ConstantKind::String => {
-                    constant_pool[ii] = CPInfo::ConstantString {
-                        string_index: buffer.read_u16::<BigEndian>().unwrap(),
-                    };
-                }
-                ConstantKind::Integer => {
-                    constant_pool[ii] = CPInfo::ConstantInteger {
-                        bytes: buffer.read_u32::<BigEndian>().unwrap(),
-                    };
-                }
-                ConstantKind::Float => {
-                    constant_pool[ii] = CPInfo::ConstantFloat {
-                        bytes: buffer.read_u32::<BigEndian>().unwrap(),
-                    };
-                }
-                ConstantKind::Long => {
-                    constant_pool[ii] = CPInfo::ConstantLong {
-                        hi_bytes: buffer.read_u32::<BigEndian>().unwrap(),
-                        lo_bytes: buffer.read_u32::<BigEndian>().unwrap(),
-                    };
-                    ii += 1;
-                }
-                ConstantKind::Double => {
-                    constant_pool[ii] = CPInfo::ConstantDouble {
-                        hi_bytes: buffer.read_u32::<BigEndian>().unwrap(),
-                        lo_bytes: buffer.read_u32::<BigEndian>().unwrap(),
-                    };
-                    ii += 1;
-                }
-                ConstantKind::NameAndType => {
-                    constant_pool[ii] = CPInfo::ConstantNameAndType {
-                        name_index: buffer.read_u16::<BigEndian>().unwrap(),
-                        descriptor_index: buffer
-                            .read_u16::<BigEndian>()
-                            .unwrap(),
-                    };
-                }
-                ConstantKind::Utf8 => {
-                    let length = buffer.read_u16::<BigEndian>().unwrap();
-                    let mut buf = vec![0u8; length as usize];
-                    buffer.read_exact(&mut buf).unwrap();
-                    constant_pool[ii] = CPInfo::ConstantUtf8 {
-                        bytes: String::from_utf8(buf).unwrap(),
-                    };
-                }
-                ConstantKind::MethodHandle => {
-                    let ref_kind = buffer.read_u8().unwrap();
-                    let ref_index = buffer.read_u16::<BigEndian>().unwrap();
-                    constant_pool[ii] = CPInfo::ConstantMethodHandle {
-                        reference_kind: ref_kind,
-                        reference_index: ref_index,
-                    };
-                }
-                ConstantKind::MethodType => {
-                    let desc_index = buffer.read_u16::<BigEndian>().unwrap();
-                    constant_pool[ii] = CPInfo::ConstantMethodType {
-                        descriptor_index: desc_index,
-                    };
-                }
-                ConstantKind::InvokeDynamic => {
-                    let bootstrap_method_attr_index =
-                        buffer.read_u16::<BigEndian>().unwrap();
-                    let name_and_type_index =
-                        buffer.read_u16::<BigEndian>().unwrap();
-                    constant_pool[ii] = CPInfo::ConstantInvokeDynamic {
-                        bootstrap_method_attr_index,
-                        name_and_type_index,
-                    };
-                }
-                _ => panic!(
-                    "Unexpected constant kind {:?} with tag {}",
-                    ConstantKind::from(tag),
-                    tag
-                ),
-            }
-        });
-
+        let cp_size = buffer.read_u16::<BigEndian>()?;
+        // Parse the constant pool.
+        let constant_pool = parse_constant_pool(&mut buffer, cp_size as usize);
+        // Extra class file metdata.
         let access_flags = buffer.read_u16::<BigEndian>()?;
         let this_class = buffer.read_u16::<BigEndian>()?;
         let super_class = buffer.read_u16::<BigEndian>()?;
-
+        // Interface definitions
         let interfaces_count = buffer.read_u16::<BigEndian>()?;
         let mut interfaces = Vec::new();
 
@@ -446,20 +333,21 @@ impl JVMParser {
             let interface = buffer.read_u16::<BigEndian>()?;
             interfaces.push(interface);
         }
-
-        let (fields_count, fields) = parse_fields(&mut buffer, &constant_pool);
-
+        // Field information.
+        let (fields_count, fields) =
+            parse_field_information(&mut buffer, &constant_pool);
+        // Methods.
         let (methods_count, methods) =
-            parse_methods(&mut buffer, &constant_pool);
-
+            parse_method_information(&mut buffer, &constant_pool);
+        // Attributes.
         let (attributes_count, attributes) =
             parse_attribute_info(&mut buffer, &constant_pool);
 
-        let jvm_class_file = JVMClassFile {
+        Ok(JVMClassFile {
             _magic: magic,
             _minor_version: minor_version,
             _major_version: major_version,
-            _constant_pool_count: constant_pool_count,
+            _constant_pool_count: cp_size,
             constant_pool,
             _access_flags: access_flags,
             _this_class: this_class,
@@ -472,13 +360,131 @@ impl JVMParser {
             methods,
             _attributes_count: attributes_count,
             _attributes: attributes,
-        };
-        Ok(jvm_class_file)
+        })
     }
 }
 
-/// Parse fields.
-fn parse_fields(
+/// Parse constants pool.
+fn parse_constant_pool(
+    reader: &mut (impl Read + Seek),
+    pool_size: usize,
+) -> Vec<CPInfo> {
+    // We preallocate because indexing is shifted and we know the pool size.
+    let mut constant_pool = vec![CPInfo::Unspecified; pool_size as usize];
+    // The first entry in the pool is at index 1 according to JVM
+    // spec.
+    #[allow(unused_assignments)]
+    (1..pool_size as usize).for_each(|mut ii| {
+        let tag = reader.read_u8().unwrap();
+        match ConstantKind::from(tag) {
+            ConstantKind::Class => {
+                constant_pool[ii] = CPInfo::ConstantClass {
+                    name_index: reader.read_u16::<BigEndian>().unwrap(),
+                };
+            }
+            ConstantKind::FieldRef => {
+                constant_pool[ii] = CPInfo::ConstantFieldRef {
+                    class_index: reader.read_u16::<BigEndian>().unwrap(),
+                    name_and_type_index: reader
+                        .read_u16::<BigEndian>()
+                        .unwrap(),
+                };
+            }
+            ConstantKind::MethodRef => {
+                constant_pool[ii] = CPInfo::ConstantMethodRef {
+                    class_index: reader.read_u16::<BigEndian>().unwrap(),
+                    name_and_type_index: reader
+                        .read_u16::<BigEndian>()
+                        .unwrap(),
+                };
+            }
+            ConstantKind::InterfaceMethodRef => {
+                constant_pool[ii] = CPInfo::ConstantInterfaceMethodRef {
+                    class_index: reader.read_u16::<BigEndian>().unwrap(),
+                    name_and_type_index: reader
+                        .read_u16::<BigEndian>()
+                        .unwrap(),
+                };
+            }
+            ConstantKind::String => {
+                constant_pool[ii] = CPInfo::ConstantString {
+                    string_index: reader.read_u16::<BigEndian>().unwrap(),
+                };
+            }
+            ConstantKind::Integer => {
+                constant_pool[ii] = CPInfo::ConstantInteger {
+                    bytes: reader.read_u32::<BigEndian>().unwrap(),
+                };
+            }
+            ConstantKind::Float => {
+                constant_pool[ii] = CPInfo::ConstantFloat {
+                    bytes: reader.read_u32::<BigEndian>().unwrap(),
+                };
+            }
+            ConstantKind::Long => {
+                constant_pool[ii] = CPInfo::ConstantLong {
+                    hi_bytes: reader.read_u32::<BigEndian>().unwrap(),
+                    lo_bytes: reader.read_u32::<BigEndian>().unwrap(),
+                };
+                ii += 1;
+            }
+            ConstantKind::Double => {
+                constant_pool[ii] = CPInfo::ConstantDouble {
+                    hi_bytes: reader.read_u32::<BigEndian>().unwrap(),
+                    lo_bytes: reader.read_u32::<BigEndian>().unwrap(),
+                };
+                ii += 1;
+            }
+            ConstantKind::NameAndType => {
+                constant_pool[ii] = CPInfo::ConstantNameAndType {
+                    name_index: reader.read_u16::<BigEndian>().unwrap(),
+                    descriptor_index: reader.read_u16::<BigEndian>().unwrap(),
+                };
+            }
+            ConstantKind::Utf8 => {
+                let length = reader.read_u16::<BigEndian>().unwrap();
+                let mut buf = vec![0u8; length as usize];
+                reader.read_exact(&mut buf).unwrap();
+                constant_pool[ii] = CPInfo::ConstantUtf8 {
+                    bytes: String::from_utf8(buf).unwrap(),
+                };
+            }
+            ConstantKind::MethodHandle => {
+                let ref_kind = reader.read_u8().unwrap();
+                let ref_index = reader.read_u16::<BigEndian>().unwrap();
+                constant_pool[ii] = CPInfo::ConstantMethodHandle {
+                    reference_kind: ref_kind,
+                    reference_index: ref_index,
+                };
+            }
+            ConstantKind::MethodType => {
+                let desc_index = reader.read_u16::<BigEndian>().unwrap();
+                constant_pool[ii] = CPInfo::ConstantMethodType {
+                    descriptor_index: desc_index,
+                };
+            }
+            ConstantKind::InvokeDynamic => {
+                let bootstrap_method_attr_index =
+                    reader.read_u16::<BigEndian>().unwrap();
+                let name_and_type_index =
+                    reader.read_u16::<BigEndian>().unwrap();
+                constant_pool[ii] = CPInfo::ConstantInvokeDynamic {
+                    bootstrap_method_attr_index,
+                    name_and_type_index,
+                };
+            }
+            _ => panic!(
+                "Unexpected constant kind {:?} with tag {}",
+                ConstantKind::from(tag),
+                tag
+            ),
+        }
+    });
+    constant_pool
+}
+
+/// Parse field information.
+fn parse_field_information(
     reader: &mut (impl Read + Seek),
     constant_pool: &[CPInfo],
 ) -> (u16, Vec<FieldInfo>) {
@@ -501,8 +507,8 @@ fn parse_fields(
     (fields_count, fields)
 }
 
-/// Parse methods.
-fn parse_methods(
+/// Parse method infromation.
+fn parse_method_information(
     reader: &mut (impl Read + Seek),
     constant_pool: &[CPInfo],
 ) -> (u16, Vec<MethodInfo>) {

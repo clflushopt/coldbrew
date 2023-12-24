@@ -396,9 +396,10 @@ impl Runtime {
                 // pc to execute.
                 let mut frame = self.frames.last().unwrap().clone();
                 let cont_pc = self.jit_cache.execute(pc, &mut frame);
-                println!("Exiting the Jit @ {pc}");
+                println!("Exiting the Jit @ {cont_pc}");
                 // Continue execution with updated PC.
             }
+            println!("Evaling instruction @ {pc}");
             self.eval(&inst)?
         }
         // let _ = self.recorder.debug();

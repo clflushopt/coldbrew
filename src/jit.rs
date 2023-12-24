@@ -5,8 +5,8 @@ use crate::bytecode::OPCode;
 use crate::runtime::{Frame, ProgramCounter, Value};
 use crate::trace::Recording;
 
-use dynasmrt::dynasm;
 use dynasmrt::x64::Assembler;
+use dynasmrt::{dynasm, DynamicLabel};
 use dynasmrt::{AssemblyOffset, DynasmApi, ExecutableBuffer};
 
 /// Intel x86-64 registers, ordered by their syntactic order in the Intel
@@ -116,6 +116,8 @@ pub struct JitCache {
     operands: Vec<Operand>,
     // Cache of native traces.
     traces: HashMap<ProgramCounter, NativeTrace>,
+    // Cache of `pc` entries to labels.
+    labels: HashMap<ProgramCounter, DynamicLabel>,
 }
 
 impl Default for JitCache {
@@ -144,6 +146,7 @@ impl JitCache {
             registers: VecDeque::from(registers),
             traces: HashMap::new(),
             operands: Vec::new(),
+            labels: HashMap::new(),
         }
     }
 
@@ -165,6 +168,7 @@ impl JitCache {
         self.registers.clear();
         self.registers = VecDeque::from(registers);
         self.operands.clear();
+        self.labels.clear();
     }
 
     /// Execute the trace at `pc` and return the mutated locals for the frame
@@ -175,11 +179,7 @@ impl JitCache {
     ///
     /// Following the x86-64 convention the locals are passed in `rdi`, exit
     /// information is passed in `rsi`.
-    pub fn execute(
-        &mut self,
-        pc: ProgramCounter,
-        frame: &mut Frame,
-    ) -> ProgramCounter {
+    pub fn execute(&mut self, pc: ProgramCounter, frame: &mut Frame) -> usize {
         if self.traces.contains_key(&pc) {
             // execute the assembled trace.
             let trace = self
@@ -204,14 +204,16 @@ impl JitCache {
             // println!("Found a native trace @ {pc}");
             let entry = trace.0;
             let buf = &trace.1;
-            let execute: fn(*mut i32, *const i32) =
+            let execute: fn(*mut i32, *const i32) -> i32 =
                 unsafe { std::mem::transmute(buf.ptr(entry)) };
 
-            // println!("Executing native trace");
-            execute(locals.as_mut_ptr(), exits.as_ptr());
-            // println!("Done executing native trace");
+            println!("Executing native trace");
+            let exit_pc = execute(locals.as_mut_ptr(), exits.as_ptr()) as usize;
+            println!("Done executing native trace");
+            exit_pc
+        } else {
+            pc.get_instruction_index()
         }
-        pc
     }
 
     /// Checks if a native trace exists at this `pc`.
@@ -255,7 +257,17 @@ impl JitCache {
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
         // Prologue for dynamically compiled code.
         let offset = prologue!(ops);
+        let mut exit_pc = 0usize;
+        // Trace compilation :
+        // For now we compile only the prologue and epilogue and ensure that
+        // entering the Jit executing the assembled code and leaving the Jit
+        // works correct.
         for entry in &recording.trace {
+            println!("Trace dump: {:}", entry);
+            // Record the instruction program counter to a new label.
+            let inst_label = ops.new_dynamic_label();
+            let _ = self.labels.insert(entry.pc(), inst_label);
+            println!("Record label {} @ {}", inst_label.get_id(), entry.pc());
             match entry.instruction().get_mnemonic() {
                 // Load operation loads a constant from the locals array at
                 // the position given by the opcode's operand.
@@ -281,6 +293,7 @@ impl JitCache {
                         &Operand::Memory(Register::Rdi, 8 * value),
                     );
                     self.operands.push(dst);
+                    exit_pc = entry.pc().get_instruction_index() + 1;
                 }
                 OPCode::IAdd => {
                     println!("Compiling an IAdd");
@@ -292,10 +305,13 @@ impl JitCache {
                 ),
             }
         }
-
+        dynasm!(ops
+            ; mov rax, exit_pc as i32
+        );
         // Epilogue for dynamically compiled code.
         epilogue!(ops);
 
+        println!("Exit PC {}", exit_pc);
         // println!("Compiled trace @ {pc}");
         let buf = ops.finalize().unwrap();
         let native_trace = NativeTrace(offset, buf);
