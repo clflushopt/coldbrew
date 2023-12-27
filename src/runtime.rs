@@ -394,9 +394,7 @@ impl Runtime {
                 // If we have a native trace at this pc run it
                 // and capture the return value which is the next
                 // pc to execute.
-                let mut frame = self.frames.last().unwrap().clone();
-                let cont_pc = self.jit_cache.execute(pc, &mut frame);
-                println!("Exiting the Jit @ {cont_pc}");
+                println!("Exiting the Jit @ {pc}");
                 // Continue execution with updated PC.
             }
             println!("Evaling instruction @ {pc}");

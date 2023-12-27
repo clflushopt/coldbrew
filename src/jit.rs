@@ -252,6 +252,7 @@ impl JitCache {
     ///     we will either jump to another trace and continue executing or exit
     ///     the JIT where we update the `pc` and transfer control back to the JIT.
     pub fn compile(&mut self, recording: &Recording) {
+        self.reset();
         // Reset Jit state.
         let pc = recording.start;
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
@@ -297,7 +298,6 @@ impl JitCache {
                 }
                 OPCode::IAdd => {
                     println!("Compiling an IAdd");
-                    Self::emit_arithmetic(self, &mut ops);
                 }
                 _ => println!(
                     "Found opcode : {:}",
