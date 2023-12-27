@@ -305,6 +305,7 @@ impl JitCache {
                 ),
             }
         }
+        #[cfg(target_arch = "x86_64")]
         dynasm!(ops
             ; mov rax, exit_pc as i32
         );
@@ -351,6 +352,7 @@ impl JitCache {
     fn emit_mov(ops: &mut Assembler, dst: &Operand, src: &Operand) {
         match (dst, src) {
             (Operand::Register(dst), Operand::Register(src)) => {
+                #[cfg(target_arch = "x86_64")]
                 dynasm!(ops
                     ;mov Rq(*dst as u8), Rq(*src as u8)
                 );
