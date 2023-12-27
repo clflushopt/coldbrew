@@ -29,10 +29,13 @@ impl RecordEntry {
 pub struct Recording {
     pub start: ProgramCounter,
     pub trace: Vec<RecordEntry>,
+    // PC's of branch targets inside the trace.
     inner_branch_targets: HashSet<ProgramCounter>,
+    // PC's of branch targets outside the trace.
     outer_branch_targets: HashSet<ProgramCounter>,
 }
 
+/// Recorder is the runtime component responsible for recording traces.
 pub struct Recorder {
     trace_start: ProgramCounter,
     loop_header: ProgramCounter,
@@ -125,8 +128,8 @@ impl Recorder {
             | OPCode::IfICmpNe
             | OPCode::IfICmpEq => self.last_instruction_was_branch = true,
             OPCode::InvokeStatic => {
-                // Check for recursive function calls.
-                // Fetch invoked function method index.
+                // Check for recursive function calls by comparing the invoked
+                // method index with the one we are currently recording.
                 let method_index = match inst.nth(0) {
                     Some(Value::Int(v)) => v,
                     _ => panic!(

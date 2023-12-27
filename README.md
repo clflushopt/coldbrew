@@ -31,29 +31,6 @@ is ready we pipeline it to the JIT cache for compilation and cachine, when we
 reach that code path again, execution leaves the VM and executes the compiled
 native trace before returning control to the VM.
 
-### Tracelet Approach
-
-The tracelet approach consists of compiling *pseudo basic blocks*, I use the
-term *pseudo* because when we compile a trace we're essentially compiling JVM
-bytecodes and we don't have an intermediate representation to truly know if
-it's a basic block. But looking empircally at the generated traces we can see
-that there are basic blocks (sequences of bytecodes without branches) followed
-by jumps.
-
-This approach is suitable for starting out the JIT because while it's expensive
-to exit the JIT at each jump we get small chunks of assembly we can introspect
-and understand.
-
-To make `coldbrew` truly tracing we will need to handle *side exits* and *trace
-stitching*. I've had a lot of misconceptions about handling exits especially
-since each tracelet can be a succession of 6 bytecode instructions but each
-are separated by one or two instructions that we can't jit compile, this is
-especially complicated to do correctly because unlike a method-based Jit you
-can't increment the program counter by the number of bytecode you just compiled
-because they are interleaved with non-compiled instructions.
-
-The HotpathVM paper[^7] has a nice explanation of this problem.
-
 ### Trace recording and execution
 
 To identify hotpaths we use heuristics that target *loop headers* which we can

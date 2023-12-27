@@ -207,9 +207,7 @@ impl JitCache {
                 unsafe { std::mem::transmute(buf.ptr(entry)) };
 
             // println!("Executing native trace");
-            unsafe {
-                execute(locals.as_mut_ptr(), exits.as_ptr());
-            }
+            execute(locals.as_mut_ptr(), exits.as_ptr());
             // println!("Done executing native trace");
         }
         pc
@@ -252,17 +250,12 @@ impl JitCache {
     ///     the JIT where we update the `pc` and transfer control back to the JIT.
     pub fn compile(&mut self, recording: &Recording) {
         // Reset Jit state.
-        self.reset();
         let pc = recording.start;
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
         // Prologue for dynamically compiled code.
         let offset = prologue!(ops);
-        // Trace compilation :
-        // For now we compile only the prologue and epilogue and ensure that
-        // entering the Jit executing the assembled code and leaving the Jit
-        // works correct.
-        for trace in &recording.trace {
-            match trace.instruction().get_mnemonic() {
+        for entry in &recording.trace {
+            match entry.instruction().get_mnemonic() {
                 // Load operation loads a constant from the locals array at
                 // the position given by the opcode's operand.
                 OPCode::ILoad
@@ -271,7 +264,7 @@ impl JitCache {
                 | OPCode::ILoad2
                 | OPCode::ILoad3 => {
                     // println!("Compiling an ILoad");
-                    let value = match trace.instruction().nth(0) {
+                    let value = match entry.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
                         _ => todo!(),
                     };
@@ -316,6 +309,17 @@ impl JitCache {
     /// Emit an arithmetic operation, covers all simple instructions such as
     /// `add`, `mul` and `sub`.
     fn emit_arithmetic(&mut self, ops: &mut Assembler) {}
+
+    /// Emit a store operation, the restriction on `dst` and `src` depends on
+    /// the underlying architecture's addressing modes. For example in ARM64
+    /// `dst` can't be a memory location.
+    fn emit_store(
+        &mut self,
+        ops: &mut Assembler,
+        dst: &Operand,
+        src: &Operand,
+    ) {
+    }
 
     /// Returns the first available register.
     fn first_available_register(&mut self) -> Operand {
