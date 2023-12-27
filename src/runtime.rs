@@ -201,6 +201,12 @@ pub struct Instruction {
     operands: Option<Vec<Value>>,
 }
 
+impl fmt::Display for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Inst({:}, {:?})", self.mnemonic, self.operands)
+    }
+}
+
 impl Instruction {
     // Creates a new instruction.
     pub fn new(mnemonic: OPCode, params: Option<Vec<Value>>) -> Self {
@@ -243,7 +249,11 @@ pub struct ProgramCounter {
 
 impl fmt::Display for ProgramCounter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} @ {}", self.instruction_index, self.method_index)
+        write!(
+            f,
+            "Instruction Index {} @ Method Index: {}",
+            self.instruction_index, self.method_index
+        )
     }
 }
 
@@ -380,15 +390,14 @@ impl Runtime {
                 self.jit_cache.compile(&recorded_trace);
             }
             if self.jit_cache.has_native_trace(pc) {
-                // println!("Entering the Jit @ {pc}");
+                println!("Entering the Jit @ {pc}");
                 // If we have a native trace at this pc run it
                 // and capture the return value which is the next
                 // pc to execute.
-                let mut frame = self.frames.last().unwrap().clone();
-                let cont_pc = self.jit_cache.execute(pc, &mut frame);
-                // println!("Exiting the Jit @ {pc}");
+                println!("Exiting the Jit @ {pc}");
                 // Continue execution with updated PC.
             }
+            println!("Evaling instruction @ {pc}");
             self.eval(&inst)?
         }
         // let _ = self.recorder.debug();

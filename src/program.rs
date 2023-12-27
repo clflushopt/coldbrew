@@ -1,6 +1,5 @@
 //! Abstract representation of a Java program.
 use crate::jvm::{AttributeInfo, CPInfo, JVMClassFile, StackMapFrame};
-use std::collections::HashMap;
 
 use regex::Regex;
 

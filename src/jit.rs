@@ -5,8 +5,8 @@ use crate::bytecode::OPCode;
 use crate::runtime::{Frame, ProgramCounter, Value};
 use crate::trace::Recording;
 
-use dynasmrt::dynasm;
 use dynasmrt::x64::Assembler;
+use dynasmrt::{dynasm, DynamicLabel};
 use dynasmrt::{AssemblyOffset, DynasmApi, ExecutableBuffer};
 
 /// Intel x86-64 registers, ordered by their syntactic order in the Intel
@@ -23,13 +23,13 @@ use dynasmrt::{AssemblyOffset, DynasmApi, ExecutableBuffer};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Register {
     Rax,
-    Rbx,
     Rcx,
     Rdx,
-    Rdi,
-    Rsi,
-    Rbp,
+    Rbx,
     Rsp,
+    Rbp,
+    Rsi,
+    Rdi,
     R8,
     R9,
     R10,
@@ -65,8 +65,8 @@ macro_rules! prologue {
         dynasm!($ops
             ; push rbp
             ; mov rbp, rsp
-            ; mov QWORD [rbp-8], rdi
-            ; mov QWORD [rbp-16], rsi
+            ; mov QWORD [rbp-24], rdi
+            ; mov QWORD [rbp-32], rsi
         );
         start
         }
@@ -85,21 +85,22 @@ macro_rules! prologue {
 
 /// aarch64 function epilogue.
 macro_rules! epilogue {
-    ($ops:ident) => {
+    ($ops:ident) => {{
+        let epilogue = $ops.offset();
         #[cfg(target_arch = "x86_64")]
         dynasm!($ops
             ; pop rbp
             ; ret
         );
-
-#[cfg(target_arch = "aarch64")]
-    dynasm!($ops
-        // Increment stack pointer to go back to where we were
-        // before the function call.
-        ; add sp, sp, #32
-        ; ret
-    );
-    };
+        #[cfg(target_arch = "aarch64")]
+        dynasm!($ops
+            // Increment stack pointer to go back to where we were
+            // before the function call.
+            ; add sp, sp, #32
+            ; ret
+        );
+        epilogue
+    }};
 }
 
 /// `NativeTrace` is a pair of `usize` and `Assembler` that represents an entry
@@ -115,6 +116,8 @@ pub struct JitCache {
     operands: Vec<Operand>,
     // Cache of native traces.
     traces: HashMap<ProgramCounter, NativeTrace>,
+    // Cache of `pc` entries to labels.
+    labels: HashMap<ProgramCounter, DynamicLabel>,
 }
 
 impl Default for JitCache {
@@ -143,6 +146,7 @@ impl JitCache {
             registers: VecDeque::from(registers),
             traces: HashMap::new(),
             operands: Vec::new(),
+            labels: HashMap::new(),
         }
     }
 
@@ -164,6 +168,7 @@ impl JitCache {
         self.registers.clear();
         self.registers = VecDeque::from(registers);
         self.operands.clear();
+        self.labels.clear();
     }
 
     /// Execute the trace at `pc` and return the mutated locals for the frame
@@ -174,11 +179,7 @@ impl JitCache {
     ///
     /// Following the x86-64 convention the locals are passed in `rdi`, exit
     /// information is passed in `rsi`.
-    pub fn execute(
-        &mut self,
-        pc: ProgramCounter,
-        frame: &mut Frame,
-    ) -> ProgramCounter {
+    pub fn execute(&mut self, pc: ProgramCounter, frame: &mut Frame) -> usize {
         if self.traces.contains_key(&pc) {
             // execute the assembled trace.
             let trace = self
@@ -203,14 +204,16 @@ impl JitCache {
             // println!("Found a native trace @ {pc}");
             let entry = trace.0;
             let buf = &trace.1;
-            let execute: fn(*mut i32, *const i32) =
+            let execute: fn(*mut i32, *const i32) -> i32 =
                 unsafe { std::mem::transmute(buf.ptr(entry)) };
 
-            // println!("Executing native trace");
-            execute(locals.as_mut_ptr(), exits.as_ptr());
-            // println!("Done executing native trace");
+            println!("Executing native trace");
+            let exit_pc = execute(locals.as_mut_ptr(), exits.as_ptr()) as usize;
+            println!("Done executing native trace");
+            exit_pc
+        } else {
+            pc.get_instruction_index()
         }
-        pc
     }
 
     /// Checks if a native trace exists at this `pc`.
@@ -249,47 +252,66 @@ impl JitCache {
     ///     we will either jump to another trace and continue executing or exit
     ///     the JIT where we update the `pc` and transfer control back to the JIT.
     pub fn compile(&mut self, recording: &Recording) {
+        self.reset();
         // Reset Jit state.
         let pc = recording.start;
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
         // Prologue for dynamically compiled code.
         let offset = prologue!(ops);
+        let mut exit_pc = 0usize;
+        // Trace compilation :
+        // For now we compile only the prologue and epilogue and ensure that
+        // entering the Jit executing the assembled code and leaving the Jit
+        // works correct.
         for entry in &recording.trace {
+            println!("Trace dump: {:}", entry);
+            // Record the instruction program counter to a new label.
+            let inst_label = ops.new_dynamic_label();
+            let _ = self.labels.insert(entry.pc(), inst_label);
+            println!("Record label {} @ {}", inst_label.get_id(), entry.pc());
             match entry.instruction().get_mnemonic() {
                 // Load operation loads a constant from the locals array at
                 // the position given by the opcode's operand.
+                //
+                // Since the locals array is the first argument to our JIT
+                // `execute` function the value can be fetched from memory
+                // using base addressing.
+                // We assume (for now) locals are 8 bytes long.
                 OPCode::ILoad
                 | OPCode::ILoad0
                 | OPCode::ILoad1
                 | OPCode::ILoad2
                 | OPCode::ILoad3 => {
-                    // println!("Compiling an ILoad");
+                    println!("Compiling an ILoad");
                     let value = match entry.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
                         _ => todo!(),
                     };
                     let dst = self.first_available_register();
-                    match dst {
-                        Operand::Register(dst) => {
-                            // println!("Using {:?} as destination register", dst);
-                            #[cfg(target_arch = "x86_64")]
-                            dynasm!(ops
-                                ; mov Rq(dst as u8), [rdi + 8 * value]
-                            );
-                            #[cfg(target_arch = "aarch64")]
-                            dynasm!(ops);
-                        }
-                        _ => todo!(),
-                    }
+                    Self::emit_load(
+                        &mut ops,
+                        &dst,
+                        &Operand::Memory(Register::Rdi, 8 * value),
+                    );
                     self.operands.push(dst);
+                    exit_pc = entry.pc().get_instruction_index() + 1;
                 }
-                _ => (),
+                OPCode::IAdd => {
+                    println!("Compiling an IAdd");
+                }
+                _ => println!(
+                    "Found opcode : {:}",
+                    entry.instruction().get_mnemonic()
+                ),
             }
         }
-
+        dynasm!(ops
+            ; mov rax, exit_pc as i32
+        );
         // Epilogue for dynamically compiled code.
         epilogue!(ops);
 
+        println!("Exit PC {}", exit_pc);
         // println!("Compiled trace @ {pc}");
         let buf = ops.finalize().unwrap();
         let native_trace = NativeTrace(offset, buf);
@@ -299,16 +321,66 @@ impl JitCache {
 
     /// Emit a load operation, where `dst` must be a register and `src` a memory
     /// address.
-    fn emit_load(&mut self, ops: &mut Assembler, dst: &Operand, src: &Operand) {
+    fn emit_load(ops: &mut Assembler, dst: &Operand, src: &Operand) {
+        match (dst, src) {
+            (Operand::Register(dst), Operand::Memory(base, offset)) => {
+                // println!("Using {:?} as destination register", dst);
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                    ; mov Rq(*dst as u8), [Rq(*base as u8) + *offset]
+                );
+            }
+            (Operand::Register(dst), Operand::Immediate(value)) => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                    ;mov Rq(*dst as u8), *value
+                );
+            }
+            (Operand::Register(dst), Operand::Register(src)) => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                    ; mov Rq(*dst as u8), Rq(*src as u8)
+                );
+            }
+            _ => todo!(),
+        }
     }
 
     /// Emit a move operation, this includes all data movement operations
     /// register to register and immediate to register.
-    fn emit_mov(&mut self, ops: &mut Assembler, dst: &Operand, src: &Operand) {}
+    fn emit_mov(ops: &mut Assembler, dst: &Operand, src: &Operand) {
+        match (dst, src) {
+            (Operand::Register(dst), Operand::Register(src)) => {
+                dynasm!(ops
+                    ;mov Rq(*dst as u8), Rq(*src as u8)
+                );
+            }
+            _ => todo!(),
+        }
+    }
 
     /// Emit an arithmetic operation, covers all simple instructions such as
     /// `add`, `mul` and `sub`.
-    fn emit_arithmetic(&mut self, ops: &mut Assembler) {}
+    fn emit_arithmetic(&mut self, ops: &mut Assembler) {
+        let rhs = match self.operands.pop() {
+            Some(rhs) => rhs,
+            None => panic!("expected operand found None"),
+        };
+        let lhs = match self.operands.pop() {
+            Some(lhs) => lhs,
+            None => panic!("expected operand found None"),
+        };
+        let dst = match &rhs {
+            &Operand::Register(reg) => Operand::Register(reg),
+            // TODO: need to mov lhs operand to the first free register.
+            _ => {
+                let dst = self.first_available_register();
+                JitCache::emit_mov(ops, &dst, &lhs);
+                dst
+            }
+        };
+        self.operands.push(dst);
+    }
 
     /// Emit a store operation, the restriction on `dst` and `src` depends on
     /// the underlying architecture's addressing modes. For example in ARM64
@@ -347,6 +419,62 @@ impl JitCache {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::io::Write;
+
+    use dynasmrt::dynasm;
+    use dynasmrt::DynasmApi;
+    use std::env;
+    use std::path::Path;
+
+    use super::JitCache;
+    use super::Operand;
+    use super::Register;
+    use crate::jvm::read_class_file;
+    use crate::jvm::JVMParser;
+    use crate::program::Program;
+    use crate::runtime::{Runtime, Value};
+
+    macro_rules! run_jit_test_case {
+        ($name: ident, $test_file:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
+                let path = Path::new(&env_var).join($test_file);
+                let class_file_bytes =
+                    read_class_file(&path).unwrap_or_else(|_| {
+                        panic!("Failed to parse file : {:?}", path.as_os_str())
+                    });
+                let class_file = JVMParser::parse(&class_file_bytes);
+                assert!(class_file.is_ok());
+                let program = Program::new(&class_file.unwrap());
+                let mut runtime = Runtime::new(program);
+                assert!(runtime.run().is_ok());
+                assert_eq!(runtime.top_return_value(), $expected);
+            }
+        };
+    }
+
     #[test]
-    fn can_jit_load_and_store_opcodes() {}
+    fn can_emit_loads() {
+        let mut ops = dynasmrt::x64::Assembler::new().unwrap();
+        let _prologue = prologue!(ops);
+        JitCache::emit_load(
+            &mut ops,
+            &Operand::Register(Register::Rax),
+            &Operand::Memory(Register::Rdi, 1),
+        );
+        let _epilogue = epilogue!(ops);
+
+        let _ = ops.finalize().and_then(|buf| {
+            let mut testfile = File::create("test.bin").unwrap();
+            let _ = testfile.write_all(&buf.to_vec());
+            Ok(buf)
+        });
+    }
+    run_jit_test_case!(
+        loops,
+        "support/tests/Loop.class",
+        Some(Value::Int(1000))
+    );
 }
