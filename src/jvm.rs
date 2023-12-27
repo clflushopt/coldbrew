@@ -652,7 +652,7 @@ fn parse_attribute_info(
                 None
             }
         };
-        attribute_info.map_or((), |attr| {
+        let _ = attribute_info.map_or((), |attr| {
             attributes.insert(attribute_name.clone(), attr);
         });
     }
@@ -711,7 +711,7 @@ fn parse_stack_frame_entry(reader: &mut impl Read, tag: u8) -> StackMapFrame {
                 stack,
             }
         }
-        _ => panic!("Unexpected tag entry {tag}"),
+        _ => unreachable!("Unexpected tag entry {tag}"),
     }
 }
 

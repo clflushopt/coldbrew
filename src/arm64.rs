@@ -59,7 +59,7 @@ pub fn split(x: u64) -> (u32, u32) {
 }
 
 #[cfg(test)]
-#[cfg(target = "aarch64")]
+#[cfg(target_arch = "aarch64")]
 mod tests {
     use super::*;
     #[test]
@@ -83,24 +83,5 @@ mod tests {
         let lo_3 = v & mask(16, 32);
         let lo_4 = v & mask(16, 48);
         assert_eq!(lo_4 | lo_3 | lo_2 | lo_1, v);
-    }
-    fn prebuilt_test_fn_aarch64(
-        buffer: &mut ExecutableBuffer,
-    ) -> dynasmrt::AssemblyOffset {
-        let mut ops = dynasmrt::aarch64::Assembler::new().unwrap();
-
-        let start = prologue!(ops);
-        let target = Register::X8 as u32;
-        let addr = 16;
-        dynasm!(ops
-            // int c = a + b;
-            ; ldr X(target), [sp, #24]
-            ; ldr X(9), [sp, #addr]
-            ; add X(8), x8, x9
-            ; str w8, [sp, #12]
-        );
-        epilogue!(ops);
-        *buffer = ops.finalize().unwrap();
-        return start;
     }
 }
