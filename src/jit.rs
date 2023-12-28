@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::bytecode::OPCode;
 use crate::runtime::{Frame, ProgramCounter, Value};
-use crate::trace::Recording;
+use crate::trace::Trace;
 
 use dynasmrt::x64::Assembler;
 use dynasmrt::{dynasm, DynamicLabel};
@@ -224,8 +224,6 @@ impl JitCache {
     /// Compile the trace given as argument and prepare a native trace
     /// for execution.
     ///
-    /// This is the tracelet JIT version where we only compile basic blocks
-    /// and exit skip all control flow opcodes.
     ///
     /// Compile works as follows :
     /// 1. Build a dynasmrt Assembler object.
@@ -251,7 +249,7 @@ impl JitCache {
     ///     preserve the target `pc` in `rax` and return, when calling `execute`
     ///     we will either jump to another trace and continue executing or exit
     ///     the JIT where we update the `pc` and transfer control back to the JIT.
-    pub fn compile(&mut self, recording: &Recording) {
+    pub fn compile(&mut self, recording: &Trace) {
         self.reset();
         // Reset Jit state.
         let pc = recording.start;
@@ -298,6 +296,23 @@ impl JitCache {
                 }
                 OPCode::IAdd => {
                     println!("Compiling an IAdd");
+                }
+                OPCode::Goto => {
+                    // let target = match ...
+                    // if let Some(pc) = trace.contains(target) {
+                    // the target jump is inside the trace
+                    // is it before or after ?
+                    // if pc < entry.pc {
+                    //  The target PC is before the current instruction
+                    //  do we have a label for it ?
+                    //  self.labels.get(pc)
+                    //  emit a jmp .label
+                    // } else if pc > entry.pc {
+                    //  The target PC is forward (think a break statement) so emit a jump
+                    //  instruction to a new label and add this to labels map.
+                    // }
+                    // If the Goto target is outside then abondon this trace.
+                    //
                 }
                 _ => println!(
                     "Found opcode : {:}",

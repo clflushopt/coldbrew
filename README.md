@@ -7,6 +7,7 @@ serves as a demo project for how JIT compilers work in genenral.
 `coldbrew` is inspired primarly by TigerShrimp[^1] and some ideas from Higgs[^2]
 the TigerShrimp C++ implementation[^3] is very readable and was of huge help
 to debug some issues along the line.
+
 Other implementations I've found useful is LuaJIT 2.0 and Mike Pall's email
 about the LuaJIT internals which you can in the mailing list[^4].
 

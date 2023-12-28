@@ -375,19 +375,14 @@ impl Runtime {
                 break;
             }
             // Fetch the next instruction.
-            let inst = self.fetch();
             let pc = self.frames.last().unwrap().pc;
-            self.profiler.count_entry(&pc);
-
-            if self.profiler.is_hot(&pc) {
-                self.recorder.init(pc, pc);
-            }
-            if self.recorder.is_recording() {
-                self.recorder.record(pc, inst.clone());
+            if self.recorder.is_recording()
+                && self.recorder.is_done_recording(pc)
+            {
                 // TODO: Clean up the naming on trace recoder implementation.
                 let recorded_trace = self.recorder.recording();
                 // Compile recorded trace.
-                self.jit_cache.compile(&recorded_trace);
+                // self.jit_cache.compile(&recorded_trace);
             }
             if self.jit_cache.has_native_trace(pc) {
                 println!("Entering the Jit @ {pc}");
@@ -396,9 +391,23 @@ impl Runtime {
                 // pc to execute.
                 println!("Exiting the Jit @ {pc}");
                 // Continue execution with updated PC.
+            } else {
+                println!("Interpreting");
+                let inst = self.fetch();
+                self.profiler.count_entry(&pc);
+
+                if self.profiler.is_hot(&pc) {
+                    println!("Found a hot loop...");
+                    println!("Recording...");
+                    self.recorder.init(pc, pc);
+                }
+
+                if self.recorder.is_recording() {
+                    self.recorder.record(pc, inst.clone());
+                }
+                println!("Evaling instruction @ {pc}");
+                self.eval(&inst)?
             }
-            println!("Evaling instruction @ {pc}");
-            self.eval(&inst)?
         }
         // let _ = self.recorder.debug();
         Ok(())

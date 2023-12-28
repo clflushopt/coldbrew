@@ -11,12 +11,12 @@ use crate::runtime::{Instruction, ProgramCounter, Value};
 /// where pc is the program counter (position of the entry in the bytecode)
 /// and inst is the instruction executed there.
 #[derive(Debug, Clone)]
-pub struct RecordEntry {
+pub struct Record {
     pc: ProgramCounter,
     inst: Instruction,
 }
 
-impl RecordEntry {
+impl Record {
     pub fn instruction(&self) -> Instruction {
         self.inst.clone()
     }
@@ -26,16 +26,16 @@ impl RecordEntry {
     }
 }
 
-impl fmt::Display for RecordEntry {
+impl fmt::Display for Record {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:} @ {:}", self.inst, self.pc)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Recording {
+pub struct Trace {
     pub start: ProgramCounter,
-    pub trace: Vec<RecordEntry>,
+    pub trace: Vec<Record>,
     // PC's of branch targets inside the trace.
     inner_branch_targets: HashSet<ProgramCounter>,
     // PC's of branch targets outside the trace.
@@ -48,9 +48,15 @@ pub struct Recorder {
     loop_header: ProgramCounter,
     is_recording: bool,
     last_instruction_was_branch: bool,
-    trace: Vec<RecordEntry>,
+    trace: Vec<Record>,
     inner_branch_targets: HashSet<ProgramCounter>,
     outer_branch_targets: HashSet<ProgramCounter>,
+}
+
+impl Default for Recorder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Recorder {
@@ -107,6 +113,7 @@ impl Recorder {
         }
         match inst.get_mnemonic() {
             OPCode::Goto => {
+                println!("Found Goto instruction");
                 let offset = match inst.nth(0) {
                     Some(Value::Int(v)) => v,
                     _ => panic!(
@@ -120,8 +127,14 @@ impl Recorder {
                     branch_target.inc_instruction_index(offset);
                     if self.trace_start == branch_target {
                         self.inner_branch_targets.insert(branch_target);
+                        println!(
+                            "Found an inner branch target {branch_target}"
+                        );
                     } else {
                         self.outer_branch_targets.insert(branch_target);
+                        println!(
+                            "Found an outer branch target {branch_target}"
+                        );
                     }
                 }
             }
@@ -201,7 +214,10 @@ impl Recorder {
             }
             _ => (),
         }
-        self.trace.push(RecordEntry { pc, inst });
+        self.trace.push(Record {
+            pc,
+            inst: inst.clone(),
+        });
     }
 
     /// Returns the `jvm::Value` from a given mnemonic.
@@ -273,9 +289,9 @@ impl Recorder {
     }
 
     /// Return the last recorded trace.
-    pub fn recording(&mut self) -> Recording {
+    pub fn recording(&mut self) -> Trace {
         self.is_recording = false;
-        Recording {
+        Trace {
             start: self.trace_start,
             trace: self.trace.clone(),
             inner_branch_targets: self.inner_branch_targets.clone(),
@@ -344,7 +360,7 @@ impl Recorder {
             };
             let new_branch_taget =
                 Instruction::new(flipped, branch_entry.inst.get_params());
-            self.trace.push(RecordEntry {
+            self.trace.push(Record {
                 pc: branch_entry.pc,
                 inst: new_branch_taget,
             });
@@ -354,11 +370,5 @@ impl Recorder {
                 self.outer_branch_targets.insert(branch_target);
             }
         }
-    }
-}
-
-impl Default for Recorder {
-    fn default() -> Self {
-        Self::new()
     }
 }
