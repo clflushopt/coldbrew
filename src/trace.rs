@@ -121,14 +121,16 @@ impl Recorder {
                     ),
                 };
                 if offset > 0 {
+                    println!("Found forward branch, aborting");
                     return;
                 } else {
+                    println!("Found backward branch");
                     let mut branch_target = pc;
                     branch_target.inc_instruction_index(offset);
                     if self.trace_start == branch_target {
                         self.inner_branch_targets.insert(branch_target);
                         println!(
-                            "Found an inner branch target {branch_target}"
+                            "Found an inner branch target, loop header @ {branch_target}"
                         );
                     } else {
                         self.outer_branch_targets.insert(branch_target);
@@ -146,7 +148,9 @@ impl Recorder {
             | OPCode::IfICmpLt
             | OPCode::IfICmpLe
             | OPCode::IfICmpNe
-            | OPCode::IfICmpEq => self.last_instruction_was_branch = true,
+            | OPCode::IfICmpEq => {
+                self.last_instruction_was_branch = true;
+            }
             OPCode::InvokeStatic => {
                 // Check for recursive function calls by comparing the invoked
                 // method index with the one we are currently recording.
@@ -159,9 +163,10 @@ impl Recorder {
                 if self.trace_start.get_method_index() == method_index as usize
                 {
                     self.is_recording = false;
-                    // println!("Found recursive call -- abort recording");
+                    println!("Found recursive call -- abort recording");
                     return;
                 }
+                return;
             }
             OPCode::Iconst0
             | OPCode::Iconst1
@@ -337,7 +342,7 @@ impl Recorder {
         );
         branch_target.inc_instruction_index(offset);
         if branch_target == pc {
-            // println!("Flipping branch @ {}", branch_entry.inst.get_mnemonic());
+            println!("Flipping branch @ {}", branch_entry.inst.get_mnemonic());
             offset = 3;
             branch_target = branch_entry.pc;
             branch_target.inc_instruction_index(offset);
@@ -356,7 +361,10 @@ impl Recorder {
                 OPCode::IfICmpGt => OPCode::IfICmpLe,
                 OPCode::IfICmpLe => OPCode::IfICmpGt,
                 OPCode::IfICmpNe => OPCode::IfICmpEq,
-                _ => todo!(),
+                _ => unreachable!(
+                    "Found unsupported branch entry {}",
+                    branch_entry.inst
+                ),
             };
             let new_branch_taget =
                 Instruction::new(flipped, branch_entry.inst.get_params());

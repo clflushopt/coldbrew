@@ -381,6 +381,10 @@ impl Runtime {
             {
                 // TODO: Clean up the naming on trace recoder implementation.
                 let recorded_trace = self.recorder.recording();
+                // Dump trace to stdout.
+                for entry in recorded_trace.trace {
+                    println!("{entry}");
+                }
                 // Compile recorded trace.
                 // self.jit_cache.compile(&recorded_trace);
             }
@@ -392,20 +396,20 @@ impl Runtime {
                 println!("Exiting the Jit @ {pc}");
                 // Continue execution with updated PC.
             } else {
-                println!("Interpreting");
+                // println!("Interpreting");
                 let inst = self.fetch();
                 self.profiler.count_entry(&pc);
 
                 if self.profiler.is_hot(&pc) {
                     println!("Found a hot loop...");
-                    println!("Recording...");
+                    // println!("Recording...");
                     self.recorder.init(pc, pc);
                 }
 
                 if self.recorder.is_recording() {
                     self.recorder.record(pc, inst.clone());
                 }
-                println!("Evaling instruction @ {pc}");
+                // println!("Evaling instruction @ {pc}");
                 self.eval(&inst)?
             }
         }
@@ -1095,7 +1099,7 @@ impl Runtime {
                     println!("System.out.println : {value:?}");
                     Ok(())
                 }
-                OPCode::GetStatic | OPCode::NOP | OPCode::Dup => Ok(()),
+                OPCode::GetStatic | OPCode::Nop | OPCode::Dup => Ok(()),
                 _ => todo!(),
             }
         } else {

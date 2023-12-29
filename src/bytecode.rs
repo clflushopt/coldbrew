@@ -5,7 +5,8 @@ use std::fmt;
 /// ref: https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-7.html
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OPCode {
-    NOP,
+    /// Nop designates a no operation, it's similar to a NOP (0x90).
+    Nop,
     AconstNULL,
     IconstM1,
     Iconst0,
@@ -215,7 +216,7 @@ pub enum OPCode {
 impl fmt::Display for OPCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NOP => write!(f, "nop"),
+            Self::Nop => write!(f, "nop"),
             Self::AconstNULL => write!(f, "aconst_null"),
             Self::IconstM1 => write!(f, "iconst_m1"),
             Self::Iconst0 => write!(f, "iconst_0"),
@@ -429,7 +430,7 @@ impl fmt::Display for OPCode {
 impl From<u8> for OPCode {
     fn from(byte: u8) -> Self {
         match byte {
-            0 => Self::NOP,
+            0 => Self::Nop,
             1 => Self::AconstNULL,
             2 => Self::IconstM1,
             3 => Self::Iconst0,
