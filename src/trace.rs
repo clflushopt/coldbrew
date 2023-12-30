@@ -73,7 +73,7 @@ impl Recorder {
     }
 
     /// Check if we are recording a trace already.
-    pub const fn is_recording(&self) -> bool {
+    pub fn is_recording(&self) -> bool {
         self.is_recording
     }
 
@@ -89,8 +89,8 @@ impl Recorder {
                 | OPCode::LReturn
                 | OPCode::FReturn
                 | OPCode::DReturn => {
+                    // If we found a recursive call we need to exit.
                     if pc.get_method_index() == entry.pc.get_method_index() {
-                        // println!("Found recursive return -- abort recording");
                         self.is_recording = false;
                         return false;
                     }
@@ -102,10 +102,13 @@ impl Recorder {
         }
     }
 
-    /// Core recording routine, given the current program counter
-    /// and instruction we are executing decide if we should recording
-    /// branching targets in the case of instructions that have an implicit
-    /// jump such as equality instructions like `IfEq` and `IfNe`.
+    /// Record the bytecode instruction at the given `pc` and `inst`
+    /// the final recorded traces are linear, straight line code with
+    /// no loops or function calls (ideally some calls could be inlined).
+    ///
+    /// During the recording phase if any aborting condition is met we stop
+    /// recording and return. The aborting conditions are (1) jumps to outer
+    /// branches, (2) function calls or (3) conditional branches.
     pub fn record(&mut self, pc: ProgramCounter, mut inst: Instruction) {
         // Branch flip if the last recorded instruction was a branch.
         if self.last_instruction_was_branch {
@@ -113,7 +116,7 @@ impl Recorder {
         }
         match inst.get_mnemonic() {
             OPCode::Goto => {
-                println!("Found Goto instruction");
+                // println!("Found Goto instruction");
                 let offset = match inst.nth(0) {
                     Some(Value::Int(v)) => v,
                     _ => panic!(
@@ -124,18 +127,17 @@ impl Recorder {
                     println!("Found forward branch, aborting");
                     return;
                 } else {
-                    println!("Found backward branch");
                     let mut branch_target = pc;
                     branch_target.inc_instruction_index(offset);
                     if self.trace_start == branch_target {
                         self.inner_branch_targets.insert(branch_target);
-                        println!(
-                            "Found an inner branch target, loop header @ {branch_target}"
-                        );
+                        // println!(
+                        //     "Found an inner branch target, loop header @ {branch_target}"
+                        // );
                     } else {
                         self.outer_branch_targets.insert(branch_target);
                         println!(
-                            "Found an outer branch target {branch_target}"
+                            "Found an outer branch target, outer loop header {branch_target}"
                         );
                     }
                 }
@@ -166,7 +168,9 @@ impl Recorder {
                     println!("Found recursive call -- abort recording");
                     return;
                 }
-                return;
+                // println!("Found a function call with target @ {method_index}");
+                // self.is_recording = false;
+                // return;
             }
             OPCode::Iconst0
             | OPCode::Iconst1

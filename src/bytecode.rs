@@ -7,7 +7,8 @@ use std::fmt;
 pub enum OPCode {
     /// Nop designates a no operation, it's similar to a NOP (0x90).
     Nop,
-    AconstNULL,
+    /// Push `null` into the stack.
+    AConstNull,
     IconstM1,
     Iconst0,
     Iconst1,
@@ -22,64 +23,165 @@ pub enum OPCode {
     Fconst2,
     Dconst0,
     Dconst1,
+    /// Push a single byte operand into the stack.
     BiPush,
+    /// Push a two byte operand (short) into the stack.
     SiPush,
+    /// Push an `int` or `float` value from the runtime constant pool at the
+    /// given index (byte long) into the stack.
     Ldc,
+    /// Push an `int` or `float` value from the runtime constant pool at the
+    /// given index (two byte long) into the stack.
     LdcW,
+    /// Push a `long` or `double` value from the runtime constant pool at the
+    /// given index into the stack.
     Ldc2W,
+    /// Load an `int` from the local variables array of the current frame
+    /// and push it into the stack, the index is given as an operand.
     ILoad,
+    /// Load a `long` from the local variables array of the current frame
+    /// and push it into the stack, the index is given as an operand.
     LLoad,
+    /// Load a `float` from the local variables array of the current frame
+    /// and push it into the stack, the index is given as an operand.
     FLoad,
+    /// Load a `double` from the local variables array of the current frame
+    /// and push it into the stack, the index is given as an operand.
     DLoad,
+    /// Load a `reference` from a local variable.
     ALoad,
+    /// Load `int` at index 0 from the local variables array of the current
+    /// frame and push it into the stack.
     ILoad0,
+    /// Load `int` at index 1 from the local variables array of the current
+    /// frame and push it into the stack.
     ILoad1,
+    /// Load `int` at index 2 from the local variables array of the current
+    /// frame and push it into the stack.
     ILoad2,
+    /// Load `int` at index 3 from the local variables array of the current
+    /// frame and push it into the stack.
     ILoad3,
+    /// Load `long` at index 0 from the local variables array of the current
+    /// frame and push it into the stack.
     LLoad0,
+    /// Load `long` at index 1 from the local variables array of the current
+    /// frame and push it into the stack.
     LLoad1,
+    /// Load `long` at index 2 from the local variables array of the current
+    /// frame and push it into the stack.
     LLoad2,
+    /// Load `long` at index 3 from the local variables array of the current
+    /// frame and push it into the stack.
     LLoad3,
+    /// Load `float` at index 0 from the local variables array of the current
+    /// frame and push it into the stack.
     FLoad0,
+    /// Load `float` at index 1 from the local variables array of the current
+    /// frame and push it into the stack.
     FLoad1,
+    /// Load `float` at index 2 from the local variables array of the current
+    /// frame and push it into the stack.
     FLoad2,
+    /// Load `float` at index 3 from the local variables array of the current
+    /// frame and push it into the stack.
     FLoad3,
+    /// Load `double` at index 0 from the local variables array of the current
+    /// frame and push it into the stack.
     DLoad0,
+    /// Load `double` at index 1 from the local variables array of the current
+    /// frame and push it into the stack.
     DLoad1,
+    /// Load `double` at index 2 from the local variables array of the current
+    /// frame and push it into the stack.
     DLoad2,
+    /// Load `double` at index 3 from the local variables array of the current
+    /// frame and push it into the stack.
     DLoad3,
+    /// Load the value at index 0 in the local variable array of the current
+    /// frame into the stack.
     ALoad0,
+    /// Load the value at index 1 in the local variable array of the current
+    /// frame into the stack.
     ALoad1,
+    /// Load the value at index 2 in the local variable array of the current
+    /// frame into the stack.
     ALoad2,
+    /// Load the value at index 3 in the local variable array of the current
+    /// frame into the stack.
     ALoad3,
     IALoad,
     LALoad,
     FALoad,
     DALoad,
+    /// Load `reference` from an array, the top tweo values on the stack are
+    /// the `index` and `reference`. The loaded value is pushed back into the
+    /// stack.
     AALoad,
     BALoad,
     CALoad,
     SALoad,
+    /// Store `int` from the local variables array of the current frame
+    /// and push it into the stack, the index is given as operand.
     IStore,
+    /// Store `long` from the local variables array of the current frame
+    /// and push it into the stack, the index is given as operand.
     LStore,
+    /// Store `float` from the local variables array of the current frame
+    /// and push it into the stack, the index is given as operand.
     FStore,
+    /// Store `double` from the local variables array of the current frame
+    /// and push it into the stack, the index is given as operand.
     DStore,
+    /// Store `reference` into a local variable.
     AStore,
+    /// Store `int` at index 0 in the local variables array of the current
+    /// frame into the stack.
     IStore0,
+    /// Store `int` at index 1 in the local variables array of the current
+    /// frame into the stack.
     IStore1,
+    /// Store `int` at index 2 in the local variables array of the current
+    /// frame into the stack.
     IStore2,
+    /// Store `int` at index 3 in the local variables array of the current
+    /// frame into the stack.
     IStore3,
+    /// Store `long` at index 0 in the local variables array of the current
+    /// frame into the stack.
     LStore0,
+    /// Store `long` at index 1 in the local variables array of the current
+    /// frame into the stack.
     LStore1,
+    /// Store `long` at index 2 in the local variables array of the current
+    /// frame into the stack.
     LStore2,
+    /// Store `long` at index 3 in the local variables array of the current
+    /// frame into the stack.
     LStore3,
+    /// Store `float` at index 0 in the local variables array of the current
+    /// frame into the stack.
     FStore0,
+    /// Store `float` at index 1 in the local variables array of the current
+    /// frame into the stack.
     FStore1,
+    /// Store `float` at index 2 in the local variables array of the current
+    /// frame into the stack.
     FStore2,
+    /// Store `float` at index 3 in the local variables array of the current
+    /// frame into the stack.
     FStore3,
+    /// Store `double` at index 0 in the local variables array of the current
+    /// frame into the stack.
     DStore0,
+    /// Store `double` at index 1 in the local variables array of the current
+    /// frame into the stack.
     DStore1,
+    /// Store `double` at index 2 in the local variables array of the current
+    /// frame into the stack.
     DStore2,
+    /// Store `double` at index 3 in the local variables array of the current
+    /// frame into the stack.
     DStore3,
     AStore0,
     AStore1,
@@ -89,6 +191,8 @@ pub enum OPCode {
     LAStore,
     FAStore,
     DAStore,
+    /// Store into a `reference` array, the top three values on the stack are
+    /// the value, index and reference to the array.
     AAStore,
     BAStore,
     CAStore,
@@ -102,25 +206,81 @@ pub enum OPCode {
     Dup2X1,
     Dup2X2,
     Swap,
+    /// Pop the top two value from the stack (they must be of type `int`) then
+    /// push their sum into the stack.
     IAdd,
+    /// Pop the top two value from the stack (they must be of type `long`) then
+    /// push their sum into the stack.
     LAdd,
+    /// Pop the top two value from the stack (they must be of type `float`) then
+    /// push their sum into the stack.
     FAdd,
+    /// Pop the top two value from the stack (they must be of type `double`) then
+    /// push their sum into the stack.
     DAdd,
+    /// Pop the top two value from the stack (they must be of type `int`) then
+    /// push their difference into the stack. The result is `value1` - `value2`
+    /// and the values are laid as [`value1`, `value2`].
     ISub,
+    /// Pop the top two value from the stack (they must be of type `long`) then
+    /// push their difference into the stack. The result is `value1` - `value2`
+    /// and the values are laid as [`value1`, `value2`].
     LSub,
+    /// Pop the top two value from the stack (they must be of type `float`) then
+    /// push their difference into the stack. The result is `value1` - `value2`
+    /// and the values are laid as [`value1`, `value2`].
     FSub,
+    /// Pop the top two value from the stack (they must be of type `double`) then
+    /// push their difference into the stack. The result is `value1` - `value2`
+    /// and the values are laid as [`value1`, `value2`].
     DSub,
+    /// Pop the top two value from the stack (they must be of type `int`) then
+    /// push their product into the stack. The result is `value1` * `value2`
+    /// and the values are laid as [`value1`, `value2`].
     IMul,
+    /// Pop the top two value from the stack (they must be of type `long`) then
+    /// push their product into the stack. The result is `value1` * `value2`
+    /// and the values are laid as [`value1`, `value2`].
     LMul,
+    /// Pop the top two value from the stack (they must be of type `float`) then
+    /// push their product into the stack. The result is `value1` * `value2`
+    /// and the values are laid as [`value1`, `value2`].
     FMul,
+    /// Pop the top two value from the stack (they must be of type `double`) then
+    /// push their product into the stack. The result is `value1` * `value2`
+    /// and the values are laid as [`value1`, `value2`].
     DMul,
+    /// Pop the top two value from the stack (they must be of type `int`) then
+    /// push their division into the stack. The result is `value1` / `value2`
+    /// and the values are laid as [`value1`, `value2`].
     IDiv,
+    /// Pop the top two value from the stack (they must be of type `long`) then
+    /// push their division into the stack. The result is `value1` / `value2`
+    /// and the values are laid as [`value1`, `value2`].
     LDiv,
+    /// Pop the top two value from the stack (they must be of type `float`) then
+    /// push their division into the stack. The result is `value1` / `value2`
+    /// and the values are laid as [`value1`, `value2`].
     FDiv,
+    /// Pop the top two value from the stack (they must be of type `double`) then
+    /// push their division into the stack. The result is `value1` / `value2`
+    /// and the values are laid as [`value1`, `value2`].
     DDiv,
+    /// Pop the top two value from the stack (they must be of type `int`) then
+    /// push their modulo into the stack. The result is `value1` / `value2`
+    /// and the values are laid as [`value1`, `value2`].
     IRem,
+    /// Pop the top two value from the stack (they must be of type `long`) then
+    /// push their modulo into the stack. The result is `value1` / `value2`
+    /// and the values are laid as [`value1`, `value2`].
     LRem,
+    /// Pop the top two value from the stack (they must be of type `float`) then
+    /// push their modulo into the stack. The result is `value1` / `value2`
+    /// and the values are laid as [`value1`, `value2`].
     FRem,
+    /// Pop the top two value from the stack (they must be of type `double`) then
+    /// push their modulo into the stack. The result is `value1` / `value2`
+    /// and the values are laid as [`value1`, `value2`].
     DRem,
     INeg,
     LNeg,
@@ -138,6 +298,8 @@ pub enum OPCode {
     LOr,
     IXor,
     LXor,
+    /// Increment the value in the local variables array stored at `index` given
+    /// as an operand by the constant `const` given as an operand.
     IInc,
     I2L,
     I2F,
@@ -159,20 +321,51 @@ pub enum OPCode {
     FCmpG,
     DCmpL,
     DCmpG,
+    /// Branch to the target offset (given as operand) if the comparison is
+    /// true, the compared values are the top value on the stack and 0.
+    ///
+    /// [value1] --->
+    ///
+    /// The value must be an `int` and the comparison is signed.
+    ///
+    /// Branch if `value` is equal to zero.
     IfEq,
+    /// Branch if `value` is not equal to zero.
     IfNe,
+    /// Branch if `value` is less than zero.
     IfLt,
+    /// Branch if `value` is greater than or equal to zero.
     IfGe,
+    /// Branch if `value` is greater than zero.
     IfGt,
+    /// Branch if `value` is less than or equal to zero.
     IfLe,
+    /// Branch to the target offset (given as operand) if the comparison is
+    /// true, the compared values are the top two values in the stack laid
+    /// out as (the values are interpreted as `int`). :
+    ///
+    /// [value1, value2] --->
+    ///
+    /// All comparisons are signed.
+    ///
+    /// Branch if the two top values on the stack are equal.
     IfICmpEq,
+    /// Branch if the two top values on the stack are not equal.
     IfICmpNe,
+    /// Branch if the `value1` is less than `value2`.
     IfICmpLt,
+    /// Branch if `value1` is greater or equal than `value2`.
     IfICmpGe,
+    /// Branch if `value1` is greater than `value2`.
     IfICmpGt,
+    /// Branch if `value1` is less then or equal `value2`.
     IfICmpLe,
     IfACmpEq,
     IfACmpNe,
+    /// Branch to the relative offset given as two 1 byte operands, execution
+    /// continues at the relative offset from the address of the opcode of the
+    /// goto instruction. The target address must be that of an opcode of an
+    /// instruction within the method that contains this `goto` instruction.
     Goto,
     Jsr,
     Ret,
@@ -182,6 +375,7 @@ pub enum OPCode {
     LReturn,
     FReturn,
     DReturn,
+    // REeturn `reference` from method.
     AReturn,
     Return,
     GetStatic,
@@ -196,6 +390,8 @@ pub enum OPCode {
     New,
     NewArray,
     ANewArray,
+    /// Pops the `reference` to the array from the stack and push its length
+    /// into the stack.
     ArrayLength,
     AThrow,
     CheckCast,
@@ -206,6 +402,10 @@ pub enum OPCode {
     MultiANewArray,
     IfNull,
     IfNonNull,
+    /// Similar to `goto` but the offset is given as a 4 byte value constructed
+    /// from 4 1-byte operands. The constructed target address must be that of
+    /// an opcode of an instruction within the method that contains the current
+    /// `goto_w` instruction.
     GotoW,
     JsrW,
     Breakpoint,
@@ -217,7 +417,7 @@ impl fmt::Display for OPCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Nop => write!(f, "nop"),
-            Self::AconstNULL => write!(f, "aconst_null"),
+            Self::AConstNull => write!(f, "aconst_null"),
             Self::IconstM1 => write!(f, "iconst_m1"),
             Self::Iconst0 => write!(f, "iconst_0"),
             Self::Iconst1 => write!(f, "iconst_1"),
@@ -431,7 +631,7 @@ impl From<u8> for OPCode {
     fn from(byte: u8) -> Self {
         match byte {
             0 => Self::Nop,
-            1 => Self::AconstNULL,
+            1 => Self::AConstNull,
             2 => Self::IconstM1,
             3 => Self::Iconst0,
             4 => Self::Iconst1,

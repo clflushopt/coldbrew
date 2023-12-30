@@ -1,7 +1,7 @@
-public class MoreLoops {
+public class Loop {
   public static int main(String[] args) {
-      int i =0;
       int sum = 0;
+      int i =0;
       for (i=0;i < 1000;i++) {
           sum += 1;
       }

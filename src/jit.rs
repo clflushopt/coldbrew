@@ -127,7 +127,7 @@ impl Default for JitCache {
 }
 
 impl JitCache {
-    /// Create a new JIT compilation cache.
+    /// Create a new JIT cache.
     pub fn new() -> Self {
         let registers = vec![
             Register::Rax,
@@ -174,7 +174,7 @@ impl JitCache {
     /// Execute the trace at `pc` and return the mutated locals for the frame
     /// and the program counter where the runtime should continue execution.
     ///
-    /// Ideally we can just return the update `locals` and exit but for now
+    /// Ideally we can just return the updated `locals` and exit but for now
     /// let's take in the entire execution frame of VM and update it.
     ///
     /// Following the x86-64 convention the locals are passed in `rdi`, exit
@@ -228,14 +228,19 @@ impl JitCache {
     /// Compile works as follows :
     /// 1. Build a dynasmrt Assembler object.
     /// 2. Emits a static prologue for the jitted code.
-    /// 3. For each instruction in the trace generate its equivalent arm64
+    /// 3. For each recorded instruction generate its equivalent x86 or arm64
+    ///    instruction and create a label for it.
+    ///   3.1 If the instruction is a jump i.e `Goto` check if we have a label
+    ///   for it, since all recorded traces are straight lines with backward
+    ///   jumps we must have one, then emit the equivalent jump with the label
+    ///   as the target.
     /// 4. Emits a static epilogue for the jitted code.
-    /// 5. When a trace recording is looked, assemble and run the jitted code.
+    /// 5. When a trace recording is looked, run the jitted code.
     ///
     /// When we run the trace we need to return PC at which the interpreter
     /// will continue execution (`reentry_pc`)
     ///
-    /// Solving the exit problem :
+    /// How jumps are handled (in more details) :
     /// 1. At each trace.instruction()
     ///     1.1 Create a DynasmLabel `inst_label_{pc}`
     ///     1.2 Append the new label to the `global_jump_table`
@@ -247,8 +252,8 @@ impl JitCache {
     ///         or it will be local if it is inside this trace.
     ///     1.3 If an entry doesn't exists it means we're exiting the JIT so we
     ///     preserve the target `pc` in `rax` and return, when calling `execute`
-    ///     we will either jump to another trace and continue executing or exit
-    ///     the JIT where we update the `pc` and transfer control back to the JIT.
+    ///     the assumption is that we will always exit back to the interpreter
+    ///     since we currently don't support trace stitching.
     pub fn compile(&mut self, recording: &Trace) {
         self.reset();
         // Reset Jit state.

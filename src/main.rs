@@ -23,6 +23,7 @@ fn main() {
     let folder = match args[1].as_str() {
         "unit" => "./support/tests/",
         "integration" => "./support/integration/",
+        "jit" => "./support/jit/",
         "help" => {
             println!("{USAGE_CMD}");
             exit(0);
@@ -74,7 +75,10 @@ fn main() {
         let mut runtime = Runtime::new(program);
         match runtime.run() {
             Ok(()) => {
-                println!("[+] Program finished running successfully !");
+                println!(
+                    "[+] Program {:?} finished running successfully !",
+                    path.file_name().unwrap()
+                );
             }
             Err(err) => println!("Error : {err}"),
         }

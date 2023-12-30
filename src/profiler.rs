@@ -18,7 +18,7 @@ pub struct Profiler {
 impl Profiler {
     pub fn new() -> Profiler {
         Profiler {
-            threshold: 2,
+            threshold: 1,
             last_pc: ProgramCounter::new(),
             records: HashMap::new(),
         }

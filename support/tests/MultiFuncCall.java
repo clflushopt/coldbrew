@@ -1,13 +1,13 @@
 public class MultiFuncCall {
-    public static void main(String[] args) {
+    public static int main(String[] args) {
         int sum = 0;
         int a = 4;
         int b = 3;
         int c = 2;
         for (int i = 0;i < 10;i++) {
-            sum += threeArgs(a,b,c);
+            sum += a + (b - c);
         }
-        System.out.println(sum);
+	return sum;
     }
 
     public static int add(int a, int b) {

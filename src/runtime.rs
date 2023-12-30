@@ -340,6 +340,8 @@ pub struct Runtime {
     profiler: profiler::Profiler,
     // Jit cache.
     jit_cache: jit::JitCache,
+    // Cached bytecode traces.
+    traces: HashMap<ProgramCounter, trace::Trace>,
     // Used to store return values of the VM.
     return_values: Vec<Value>,
 }
@@ -364,6 +366,7 @@ impl Runtime {
             recorder: trace::Recorder::new(),
             profiler: profiler::Profiler::new(),
             jit_cache: jit::JitCache::new(),
+            traces: HashMap::new(),
             return_values: vec![],
         }
     }
@@ -378,9 +381,14 @@ impl Runtime {
             let pc = self.frames.last().unwrap().pc;
             if self.recorder.is_recording()
                 && self.recorder.is_done_recording(pc)
+                && !self.traces.contains_key(&pc)
             {
                 // TODO: Clean up the naming on trace recoder implementation.
                 let recorded_trace = self.recorder.recording();
+                println!("Reseting recorder state");
+                // TODO: Remove clone once we get rid of stdout trace dump
+                // Cache the trace.
+                self.traces.insert(pc, recorded_trace.clone());
                 // Dump trace to stdout.
                 for entry in recorded_trace.trace {
                     println!("{entry}");
@@ -401,7 +409,7 @@ impl Runtime {
                 self.profiler.count_entry(&pc);
 
                 if self.profiler.is_hot(&pc) {
-                    println!("Found a hot loop...");
+                    // println!("Found a hot loop...");
                     // println!("Recording...");
                     self.recorder.init(pc, pc);
                 }
