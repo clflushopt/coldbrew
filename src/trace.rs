@@ -48,7 +48,7 @@ pub struct Recorder {
     loop_header: ProgramCounter,
     is_recording: bool,
     last_instruction_was_branch: bool,
-    trace: Vec<Record>,
+    pub trace: Vec<Record>,
     inner_branch_targets: HashSet<ProgramCounter>,
     outer_branch_targets: HashSet<ProgramCounter>,
 }
@@ -110,9 +110,12 @@ impl Recorder {
     /// recording and return. The aborting conditions are (1) jumps to outer
     /// branches, (2) function calls or (3) conditional branches.
     pub fn record(&mut self, pc: ProgramCounter, mut inst: Instruction) {
+        // FIXME: This is not needed since we want to insert guards when
+        // running traces. The only way to insert a guard is to interpret
+        // the branching instruction.
         // Branch flip if the last recorded instruction was a branch.
         if self.last_instruction_was_branch {
-            self.flip_branch(pc);
+            // self.flip_branch(pc);
         }
         match inst.get_mnemonic() {
             OPCode::Goto => {
@@ -131,14 +134,8 @@ impl Recorder {
                     branch_target.inc_instruction_index(offset);
                     if self.trace_start == branch_target {
                         self.inner_branch_targets.insert(branch_target);
-                        // println!(
-                        //     "Found an inner branch target, loop header @ {branch_target}"
-                        // );
                     } else {
                         self.outer_branch_targets.insert(branch_target);
-                        println!(
-                            "Found an outer branch target, outer loop header {branch_target}"
-                        );
                     }
                 }
             }
@@ -168,9 +165,6 @@ impl Recorder {
                     println!("Found recursive call -- abort recording");
                     return;
                 }
-                // println!("Found a function call with target @ {method_index}");
-                // self.is_recording = false;
-                // return;
             }
             OPCode::Iconst0
             | OPCode::Iconst1
@@ -370,12 +364,14 @@ impl Recorder {
                     branch_entry.inst
                 ),
             };
+            println!("Flipped branch is {}", flipped);
             let new_branch_taget =
                 Instruction::new(flipped, branch_entry.inst.get_params());
             self.trace.push(Record {
                 pc: branch_entry.pc,
                 inst: new_branch_taget,
             });
+
             if offset < 0 {
                 self.inner_branch_targets.insert(branch_target);
             } else {

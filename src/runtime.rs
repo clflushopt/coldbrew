@@ -43,6 +43,7 @@ impl fmt::Display for RuntimeError {
 }
 
 /// JVM value types.
+#[repr(C, u8)]
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Int(i32),
@@ -1276,6 +1277,30 @@ mod tests {
     use std::env;
     use std::path::Path;
 
+    #[test]
+    fn can_handle_values() {
+        let values = vec![
+            Value::Int(1),
+            Value::Long(1),
+            Value::Float(1.),
+            Value::Double(1.),
+        ];
+
+        // Tag is 1 byte since we are using `repr[C,u8]` the largest primitive
+        // type supported is float which is 8 bytes, accounting for alignment
+        // we end up with 16 bytes (9 bytes aren't aligned nearest is 16).
+        assert_eq!(std::mem::size_of::<Value>(), 16);
+        unsafe {
+            for val in values {
+                let mem = std::slice::from_raw_parts(
+                    &val as *const _ as *const u8,
+                    std::mem::size_of::<Value>(),
+                );
+                println!("Value as bytes : {:?}", mem);
+            }
+        }
+    }
+
     // Macro to generate unit tests for the runtime.
     macro_rules! test_runtime_case {
         ($name: ident, $test_files:expr, $expected:expr) => {
@@ -1336,6 +1361,6 @@ mod tests {
     test_runtime_case!(
         loop_with_function_call,
         ["support/tests/MultiFuncCall.class"],
-        Some(Value::Int(5))
+        Some(Value::Int(50))
     );
 }

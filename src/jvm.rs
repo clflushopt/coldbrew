@@ -798,7 +798,7 @@ mod tests {
     fn can_parse_class_file_header() {
         let env_var = env::var("CARGO_MANIFEST_DIR").unwrap();
         let path =
-            Path::new(&env_var).join("support/tests//SingleFuncCall.class");
+            Path::new(&env_var).join("support/tests/SingleFuncCall.class");
         let class_file_bytes = read_class_file(&path).unwrap_or_else(|_| {
             panic!("Failed to parse file : {:?}", path.as_os_str())
         });
@@ -808,7 +808,7 @@ mod tests {
         let expected_class_file = JVMClassFile {
             _magic: 3405691582,
             _minor_version: 0,
-            _major_version: 63,
+            _major_version: 64,
             _constant_pool_count: 31,
             constant_pool: vec![
                 CPInfo::Unspecified,
