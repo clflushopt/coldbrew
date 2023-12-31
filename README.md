@@ -68,12 +68,8 @@ Inst(iadd, None) @ Instruction Index 14 @ Method Index: 11
 Inst(istore, Some([Int(1)])) @ Instruction Index 15 @ Method Index: 11
 Inst(iinc, Some([Int(2), Int(1)])) @ Instruction Index 16 @ Method Index: 11
 Inst(goto, Some([Int(-13)])) @ Instruction Index 19 @ Method Index: 11
-Trace dump: Inst(iload, Some([Int(2)])) @ Instruction Index 6 @ Method Index: 11
 
 ```
-
-As you can see the above trace is entirely self-contained, the `goto` instruction
-is a backwards branch to the loop entry, there are no outer or forward branches.
 
 Ideally in a tracing JIT you might want to replace the comparison instruction by
 speculatively executing under the assumption that the condition is true. This is
