@@ -398,7 +398,9 @@ impl Runtime {
                     println!("{entry}");
                 }
                 // Compile recorded trace.
-                self.jit_cache.compile(&recorded_trace);
+                if jit_mode {
+                    self.jit_cache.compile(&recorded_trace);
+                }
             }
             if self.jit_cache.has_native_trace(pc) && jit_mode {
                 #[cfg(debug_assertions)]
@@ -407,10 +409,10 @@ impl Runtime {
                 // and capture the return value which is the next
                 // pc to execute and restore the stack frame.
                 let mut frame = self.frames.pop().unwrap();
-                let cont_pc = self.jit_cache.execute(pc, &mut frame);
+                let _cont_pc = self.jit_cache.execute(pc, &mut frame);
                 self.frames.push(frame);
                 #[cfg(debug_assertions)]
-                println!("Jit exit @ {cont_pc}");
+                println!("Jit exit @ {_cont_pc}");
                 // Return execution to the interpreter.
                 continue;
             } else {

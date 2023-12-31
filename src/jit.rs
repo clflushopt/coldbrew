@@ -22,6 +22,7 @@ use dynasmrt::{
 /// Registers Rbx, Rsp, Rbp and R12 to R15 must be callee preserved if they
 /// are to be used, the other registers can be clobbered and caller must
 /// preserve them.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Register {
     Rax,
@@ -43,6 +44,7 @@ enum Register {
 }
 
 /// Intel x86-64 shorthand for instructions.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 enum Inst {
     Add,
@@ -493,25 +495,25 @@ impl JitCache {
     /// Emit an arithmetic operation, covers only simple instructions such as
     /// `add`, `mul` and `sub`.
     fn emit_arithmetic(&mut self, ops: &mut Assembler, op: Inst) {
-        let op2 = match self.operands.pop() {
+        let rhs = match self.operands.pop() {
             Some(rhs) => rhs,
             None => panic!("expected operand found None"),
         };
-        let op1 = match self.operands.pop() {
+        let lhs = match self.operands.pop() {
             Some(lhs) => lhs,
             None => panic!("expected operand found None"),
         };
 
-        let dst = match &op1 {
+        let dst = match &lhs {
             &Operand::Register(reg) => Operand::Register(reg),
             // TODO: need to mov lhs operand to the first free register.
             _ => {
                 let dst = self.first_available_register();
-                JitCache::emit_mov(ops, &dst, &op1);
+                JitCache::emit_mov(ops, &dst, &lhs);
                 dst
             }
         };
-        if let Operand::Register(reg) = &op2 {
+        if let Operand::Register(reg) = &rhs {
             self.registers.push_back(*reg)
         }
 
@@ -522,31 +524,59 @@ impl JitCache {
                 let Operand::Register(dst) = dst else {
                     unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
                 };
-                let Operand::Register(src) = op2 else {
-                    unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", op2)
-                };
-                #[cfg(target_arch = "x86_64")]
-                dynasm!(ops
-                        ; add Rq(dst as u8), Rq(src as u8)
-                );
+
+                match rhs {
+                    Operand::Register(src) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; add Rq(dst as u8), Rq(src as u8)
+                        );
+                    },
+                    Operand::Immediate(val) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; add Rq(dst as u8), val as _
+                        );
+                    },
+                    Operand::Memory(base, offset) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; add Rq(dst as u8), [Rq(base as u8) + offset]
+                        );
+                    },
+                }
             }
             Inst::Sub => {
                 let Operand::Register(dst) = dst else {
                     unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
                 };
-                let Operand::Register(src) = op2 else {
-                    unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", op2)
-                };
-                #[cfg(target_arch = "x86_64")]
-                dynasm!(ops
-                        ; sub Rq(dst as u8), Rq(src as u8)
-                );
+
+                match rhs {
+                    Operand::Register(src) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; sub Rq(dst as u8), Rq(src as u8)
+                        );
+                    },
+                    Operand::Immediate(val) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; sub Rq(dst as u8), val as _
+                        );
+                    },
+                    Operand::Memory(base, offset) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; sub Rq(dst as u8), [Rq(base as u8) + offset]
+                        );
+                    },
+                }
             }
             Inst::IMul => {
                 let Operand::Register(dst) = dst else {
                     unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
                 };
-                match op2 {
+                match rhs {
                     Operand::Register(src) => {
                         #[cfg(target_arch = "x86_64")]
                         dynasm!(ops
@@ -565,7 +595,6 @@ impl JitCache {
                                 ; imul Rq(dst as u8), [Rq(base as u8) + offset]
                         );
                     },
-
                 }
             }
             _ => unreachable!("emit_arithmetic only supports simple x86-64 arithmetic (add, sub and mul).)"),
@@ -618,16 +647,16 @@ impl JitCache {
 
     /// Emit conditional branch for the given instruction.
     fn emit_cond_branch(&mut self, ops: &mut Assembler, cond: OPCode) {
-        let op2 = match self.free_register() {
+        let rhs = match self.free_register() {
             Some(operand) => operand,
             None => panic!("expected operand found None"),
         };
-        let op1 = match self.free_register() {
+        let lhs = match self.free_register() {
             Some(operand) => operand,
             None => todo!("Expected register in operand stack found None"),
         };
 
-        match (op1, op2) {
+        match (lhs, rhs) {
             (Operand::Register(lhs), Operand::Register(rhs)) => {
                 dynasm!(ops
                     ; cmp Rq(lhs as u8), Rq(rhs as u8)
@@ -655,7 +684,7 @@ impl JitCache {
             }
             _ => unreachable!(
                 "unsupported comparison between operands {:?} and {:?}",
-                op1, op2
+                lhs, rhs
             ),
         }
 
