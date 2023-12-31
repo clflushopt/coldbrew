@@ -1,8 +1,7 @@
 # coldbrew
 
-`coldbrew` is a tracing JIT compiler for the Java Virtual Machine, with
-support for primitive numeric types (`int`, `long`, `float`, `double`) and
-serves as a demo project for how JIT compilers work in genenral.
+`coldbrew` is a toy interpreter and tracing JIT compiler for the JVM
+it mainly serves as a demo project for how JIT compilers work in genenral.
 
 Currently `coldbrew` is able to successfully interpret, record, compile and
 execute native code on x86-64 for some very simple demo programs e.g `support/jit`.
