@@ -66,11 +66,9 @@ enum Operand {
     // Memory operands represent memory addresses as a pair of base register
     // and immediate offset often seen as `[bp, offset]`.
     Memory(Register, i32),
-    // Label operands.
-    Label(ProgramCounter),
 }
 
-/// x86_64 functioe prologue, allocates `max_locals` space on the stack even
+/// x86_64 function prologue, allocates `max_locals` space on the stack even
 /// though they might not be all used.
 macro_rules! prologue {
     ($ops:ident) => {{
@@ -177,27 +175,6 @@ impl JitCache {
         }
     }
 
-    /// Reset Jit state.
-    fn reset(&mut self) {
-        let registers = vec![
-            Register::Rax,
-            Register::Rcx,
-            Register::R8,
-            Register::R9,
-            Register::R10,
-            Register::R11,
-            Register::Rbx,
-            Register::R12,
-            Register::R13,
-            Register::R14,
-            Register::R15,
-        ];
-        self.registers.clear();
-        self.registers = VecDeque::from(registers);
-        self.operands.clear();
-        self.labels.clear();
-    }
-
     /// Execute the trace at `pc` and return the mutated locals for the frame
     /// and the program counter where the runtime should continue execution.
     ///
@@ -215,9 +192,9 @@ impl JitCache {
                 .expect("Expected a native trace @ {pc}");
 
             // Flatten the locals `HashMap` into a `i32` slice.
-            let mut locals = vec![0i32; 4096];
+            let mut locals = vec![0i32; frame.max_locals as usize * 8];
             // Exit information, for now is empty.
-            let exits = vec![0i32; 4096];
+            let exits = [0i32; 0];
 
             for (key, val) in frame.locals.iter() {
                 locals[*key] = match val {
@@ -228,21 +205,18 @@ impl JitCache {
                 };
             }
 
-            // println!("Found a native trace @ {pc}");
             let entry = trace.0;
             let buf = &trace.1;
             let execute: fn(*mut i32, *const i32) -> i32 =
                 unsafe { std::mem::transmute(buf.ptr(entry)) };
 
-            println!("Executing native trace");
             let exit_pc = execute(locals.as_mut_ptr(), exits.as_ptr()) as usize;
-            println!("Rewriting locals frame");
-            for (index, local) in locals.iter().enumerate() {
-                frame.locals.insert(index, Value::Int(*local));
+            frame.locals.clear();
+            for (index, value) in locals.iter().enumerate() {
+                frame.locals.insert(index, Value::Int(*value));
             }
-            println!("Rewriting frame pc");
+
             frame.pc.instruction_index = exit_pc as usize;
-            println!("Done executing native trace");
             exit_pc
         } else {
             pc.get_instruction_index()
@@ -298,11 +272,9 @@ impl JitCache {
         // entering the Jit executing the assembled code and leaving the Jit
         // works correct.
         for entry in &recording.trace {
-            println!("Trace dump: {:}", entry);
             // Record the instruction program counter to a new label.
             let inst_label = ops.new_dynamic_label();
             let _ = self.labels.insert(entry.pc(), inst_label);
-            println!("Recorded label {} @ {}", inst_label.get_id(), entry.pc());
             match entry.instruction().get_mnemonic() {
                 // Load operation loads a constant from the locals array at
                 // the position given by the opcode's operand.
@@ -316,7 +288,6 @@ impl JitCache {
                 | OPCode::ILoad1
                 | OPCode::ILoad2
                 | OPCode::ILoad3 => {
-                    println!("Compiling an iload");
                     let value = match entry.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
                         _ => unreachable!("Operand to iload (index in locals) must be int in current implementation")
@@ -330,7 +301,7 @@ impl JitCache {
                     Self::emit_mov(
                         &mut ops,
                         &dst,
-                        &Operand::Memory(Register::Rdi, 8 * value),
+                        &Operand::Memory(Register::Rdi, 4 * value),
                     );
                     self.operands.push(dst);
                 }
@@ -339,7 +310,6 @@ impl JitCache {
                 | OPCode::IStore1
                 | OPCode::IStore2
                 | OPCode::IStore3 => {
-                    println!("Compiling an istore");
                     let value = match entry.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
                             _ => unreachable!("Operand to istore (index in locals) must be int in current implementation")
@@ -350,7 +320,7 @@ impl JitCache {
                         );
                         Self::emit_mov(
                             &mut ops,
-                            &Operand::Memory(Register::Rdi, 8 * value),
+                            &Operand::Memory(Register::Rdi, 4 * value),
                             &src,
                         );
                     }
@@ -363,7 +333,6 @@ impl JitCache {
                     self.operands.push(Operand::Immediate(imm));
                 }
                 OPCode::IAdd => {
-                    println!("Compiling an iadd");
                     #[cfg(target_arch = "x86_64")]
                     dynasm!(ops
                         ; =>inst_label
@@ -371,7 +340,6 @@ impl JitCache {
                     self.emit_arithmetic(&mut ops, Inst::Add);
                 }
                 OPCode::ISub => {
-                    println!("Compiling an isub");
                     #[cfg(target_arch = "x86_64")]
                     dynasm!(ops
                         ; =>inst_label
@@ -379,7 +347,6 @@ impl JitCache {
                     self.emit_arithmetic(&mut ops, Inst::Sub);
                 }
                 OPCode::IMul => {
-                    println!("Compiling an imul");
                     #[cfg(target_arch = "x86_64")]
                     dynasm!(ops
                         ; =>inst_label
@@ -387,7 +354,6 @@ impl JitCache {
                     self.emit_arithmetic(&mut ops, Inst::IMul);
                 }
                 OPCode::IDiv => {
-                    println!("Compiling an idiv");
                     #[cfg(target_arch = "x86_64")]
                     dynasm!(ops
                         ; =>inst_label
@@ -395,7 +361,6 @@ impl JitCache {
                     self.emit_div(&mut ops, Inst::IDiv);
                 }
                 OPCode::IRem => {
-                    println!("Compiling an iadd");
                     #[cfg(target_arch = "x86_64")]
                     dynasm!(ops
                         ; =>inst_label
@@ -403,7 +368,6 @@ impl JitCache {
                     self.emit_div(&mut ops, Inst::IRem);
                 }
                 OPCode::IInc => {
-                    println!("Compiling an iinc");
                     let index = match entry.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
                             _ => unreachable!("First operand to iinc (index in locals) must be int")
@@ -417,7 +381,7 @@ impl JitCache {
                         ; =>inst_label
                     );
                     dynasm!(ops
-                        ; add [Rq(Register::Rdi as u8) + 8 * index], constant as _
+                        ; add [Rq(Register::Rdi as u8) + 4* index], constant as _
                     );
                 }
                 OPCode::Goto => {
@@ -440,13 +404,11 @@ impl JitCache {
                         Some(Value::Int(x)) => x,
                             _ => unreachable!("First operand to goto (relative offset) must be int")
                     };
-                    println!("Compiling a goto");
                     if let Some(label) = self.labels.get(&ProgramCounter::new(
                         entry.pc().get_method_index(),
                         (entry.pc().get_instruction_index() as isize
                             + target as isize) as usize,
                     )) {
-                        println!("Found target label {}", label.get_id());
                         #[cfg(target_arch = "x86_64")]
                         dynasm!(ops
                             ; jmp =>*label
@@ -465,43 +427,26 @@ impl JitCache {
                             _ => unreachable!("First operand to if_icmpge (relative offset) must be int")
                     };
                     let mnemonic = entry.instruction().get_mnemonic();
-                    println!("Conditional {mnemonic} Target Pc is {target}");
-                    exit_pc = target;
+                    exit_pc = (entry.pc().get_instruction_index() as isize
+                        + target as isize) as i32;
+
                     self.emit_cond_branch(&mut ops, mnemonic);
                 }
-                _ => println!(
-                    "Found opcode : {:}",
-                    entry.instruction().get_mnemonic()
-                ),
+                _ => (),
             }
         }
         #[cfg(target_arch = "x86_64")]
         dynasm!(ops
             ; ->abort_guard:
-            ; mov rax, exit_pc as i32
+            ; mov rax, exit_pc as _
         );
         // Epilogue for dynamically compiled code.
         epilogue!(ops);
 
-        println!("Exit PC {}", exit_pc);
-        // println!("Compiled trace @ {pc}");
         let buf = ops.finalize().unwrap();
-        // Because you can't have randomness without YAFC
-        // HAXOR START
-        println!("Dumping jit result to disk");
-        use std::fs::File;
-        use std::io::Write;
-        let dummy = vec![1, 2, 3, 4, 5];
-        let addr = &dummy as *const _ as usize;
-        let filename = format!("test-{addr}.bin");
-        let mut testfile = File::create(&filename).unwrap();
-        let _ = testfile.write_all(&buf.to_vec());
-        println!("Dumped jitted code to {filename}");
-        // HAXOR DONE
 
         let native_trace = NativeTrace(offset, buf);
         self.traces.insert(pc, native_trace);
-        // println!("Added trace to native traces");
     }
 
     /// Emit a move operation, this includes all data movement operations
@@ -548,56 +493,80 @@ impl JitCache {
     /// Emit an arithmetic operation, covers only simple instructions such as
     /// `add`, `mul` and `sub`.
     fn emit_arithmetic(&mut self, ops: &mut Assembler, op: Inst) {
-        let rhs = match self.operands.pop() {
+        let op2 = match self.operands.pop() {
             Some(rhs) => rhs,
             None => panic!("expected operand found None"),
         };
-        let lhs = match self.operands.pop() {
+        let op1 = match self.operands.pop() {
             Some(lhs) => lhs,
             None => panic!("expected operand found None"),
         };
 
-        let dst = match &lhs {
+        let dst = match &op1 {
             &Operand::Register(reg) => Operand::Register(reg),
             // TODO: need to mov lhs operand to the first free register.
             _ => {
                 let dst = self.first_available_register();
-                JitCache::emit_mov(ops, &dst, &lhs);
+                JitCache::emit_mov(ops, &dst, &op1);
                 dst
             }
         };
-
-        match &rhs {
-            Operand::Register(reg) => self.registers.push_back(*reg),
-            _ => (),
+        if let Operand::Register(reg) = &op2 {
+            self.registers.push_back(*reg)
         }
 
         self.operands.push(dst);
 
-        let Operand::Register(dst) = dst else {
-            unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
-        };
-        let Operand::Register(src) = rhs else {
-            unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
-        };
         match op {
             Inst::Add => {
+                let Operand::Register(dst) = dst else {
+                    unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
+                };
+                let Operand::Register(src) = op2 else {
+                    unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", op2)
+                };
                 #[cfg(target_arch = "x86_64")]
                 dynasm!(ops
                         ; add Rq(dst as u8), Rq(src as u8)
                 );
             }
             Inst::Sub => {
+                let Operand::Register(dst) = dst else {
+                    unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
+                };
+                let Operand::Register(src) = op2 else {
+                    unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", op2)
+                };
                 #[cfg(target_arch = "x86_64")]
                 dynasm!(ops
                         ; sub Rq(dst as u8), Rq(src as u8)
                 );
             }
             Inst::IMul => {
-                #[cfg(target_arch = "x86_64")]
-                dynasm!(ops
-                        ; imul Rd(dst as u8), Rd(src as u8)
-                );
+                let Operand::Register(dst) = dst else {
+                    unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
+                };
+                match op2 {
+                    Operand::Register(src) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; imul Rq(dst as u8), Rq(src as u8)
+                        );
+                    },
+                    Operand::Immediate(val) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; imul Rq(dst as u8), Rq(dst as u8), val as _
+                        );
+                    },
+                    Operand::Memory(base, offset) => {
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                                ; imul Rq(dst as u8), [Rq(base as u8) + offset]
+                        );
+                    },
+
+                }
             }
             _ => unreachable!("emit_arithmetic only supports simple x86-64 arithmetic (add, sub and mul).)"),
         }
@@ -722,14 +691,9 @@ impl JitCache {
 
     /// Free the top most register in the operand stack.
     fn free_register(&mut self) -> Option<Operand> {
-        println!("Self::operands: {:?}", self.operands);
         let op = self.operands.pop();
-
-        if let Some(op) = op {
-            match op {
-                Operand::Register(reg) => self.registers.push_back(reg),
-                _ => (),
-            }
+        if let Some(Operand::Register(reg)) = op {
+            self.registers.push_back(reg)
         }
         op
     }
@@ -737,17 +701,9 @@ impl JitCache {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-    use std::io::Write;
-
-    use dynasmrt::dynasm;
-    use dynasmrt::DynasmApi;
     use std::env;
     use std::path::Path;
 
-    use super::JitCache;
-    use super::Operand;
-    use super::Register;
     use crate::jvm::read_class_file;
     use crate::jvm::JVMParser;
     use crate::program::Program;
@@ -767,32 +723,15 @@ mod tests {
                 assert!(class_file.is_ok());
                 let program = Program::new(&class_file.unwrap());
                 let mut runtime = Runtime::new(program);
-                assert!(runtime.run().is_ok());
+                assert!(runtime.run(true).is_ok());
                 assert_eq!(runtime.top_return_value(), $expected);
             }
         };
     }
 
-    #[test]
-    fn can_emit_loads() {
-        let mut ops = dynasmrt::x64::Assembler::new().unwrap();
-        let _prologue = prologue!(ops);
-        JitCache::emit_mov(
-            &mut ops,
-            &Operand::Register(Register::Rax),
-            &Operand::Memory(Register::Rdi, 1),
-        );
-        let _epilogue = epilogue!(ops);
-
-        let _ = ops.finalize().and_then(|buf| {
-            let mut testfile = File::create("test.bin").unwrap();
-            let _ = testfile.write_all(&buf.to_vec());
-            Ok(buf)
-        });
-    }
     run_jit_test_case!(
         loops,
-        "support/tests/Loop.class",
-        Some(Value::Int(1000))
+        "support/tests/HotLoop.class",
+        Some(Value::Int(55))
     );
 }

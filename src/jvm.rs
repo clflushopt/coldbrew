@@ -370,11 +370,11 @@ fn parse_constant_pool(
     pool_size: usize,
 ) -> Vec<CPInfo> {
     // We preallocate because indexing is shifted and we know the pool size.
-    let mut constant_pool = vec![CPInfo::Unspecified; pool_size as usize];
+    let mut constant_pool = vec![CPInfo::Unspecified; pool_size];
     // The first entry in the pool is at index 1 according to JVM
     // spec.
     #[allow(unused_assignments)]
-    (1..pool_size as usize).for_each(|mut ii| {
+    (1..pool_size).for_each(|mut ii| {
         let tag = reader.read_u8().unwrap();
         match ConstantKind::from(tag) {
             ConstantKind::Class => {

@@ -57,7 +57,7 @@ pub struct Method {
     _return_type: Type,
     pub arg_types: Vec<Type>,
     _max_stack: u16,
-    _max_locals: u16,
+    pub max_locals: u16,
     pub code: Vec<u8>,
     _constant: Option<u16>,
     _stack_map_table: Option<Vec<StackMapFrame>>,
@@ -70,7 +70,7 @@ impl Default for Method {
             _return_type: Type::new(),
             arg_types: Vec::new(),
             _max_stack: 0,
-            _max_locals: 0,
+            max_locals: 0,
             code: Vec::new(),
             _constant: None,
             _stack_map_table: None,
@@ -142,7 +142,7 @@ impl Program {
                 _return_type: return_type,
                 arg_types,
                 _max_stack: max_stack,
-                _max_locals: max_locals,
+                max_locals,
                 code,
                 _constant: constant,
                 _stack_map_table: stack_map_table,
@@ -201,6 +201,11 @@ impl Program {
     // Returns a slice containing code of method pointed at by `method_index`.
     pub fn code(&self, method_index: usize) -> &[u8] {
         &self.methods[method_index].code
+    }
+
+    // Return the declared max locals for a method.
+    pub fn max_locals(&self, method_index: usize) -> u16 {
+        self.methods[method_index].max_locals
     }
 
     // Parse constant method types, returns a tuple of argument types and
@@ -328,7 +333,7 @@ mod tests {
                     })),
                 }],
                 _max_stack: 2,
-                _max_locals: 2,
+                max_locals: 2,
                 code: vec![
                     16, 12, 184, 0, 7, 60, 178, 0, 13, 27, 182, 0, 19, 177,
                 ],
@@ -343,7 +348,7 @@ mod tests {
                 },
                 arg_types: vec![],
                 _max_stack: 1,
-                _max_locals: 1,
+                max_locals: 1,
                 code: vec![42, 183, 0, 1, 177],
                 _constant: None,
                 _stack_map_table: None,
@@ -359,7 +364,7 @@ mod tests {
                     sub_t: None,
                 }],
                 _max_stack: 2,
-                _max_locals: 3,
+                max_locals: 3,
                 code: vec![
                     4, 60, 5, 61, 28, 26, 163, 0, 13, 27, 28, 104, 60, 132, 2,
                     1, 167, 255, 244, 27, 172,

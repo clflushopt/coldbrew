@@ -1,7 +1,6 @@
 //! Runtime tracing module for coldbrew.
 use core::fmt;
 use std::collections::HashSet;
-use std::fmt::Write;
 
 use crate::bytecode::OPCode;
 use crate::runtime::{Instruction, ProgramCounter, Value};
@@ -36,10 +35,6 @@ impl fmt::Display for Record {
 pub struct Trace {
     pub start: ProgramCounter,
     pub trace: Vec<Record>,
-    // PC's of branch targets inside the trace.
-    inner_branch_targets: HashSet<ProgramCounter>,
-    // PC's of branch targets outside the trace.
-    outer_branch_targets: HashSet<ProgramCounter>,
 }
 
 /// Recorder is the runtime component responsible for recording traces.
@@ -110,24 +105,16 @@ impl Recorder {
     /// recording and return. The aborting conditions are (1) jumps to outer
     /// branches, (2) function calls or (3) conditional branches.
     pub fn record(&mut self, pc: ProgramCounter, mut inst: Instruction) {
-        // FIXME: This is not needed since we want to insert guards when
-        // running traces. The only way to insert a guard is to interpret
-        // the branching instruction.
-        // Branch flip if the last recorded instruction was a branch.
-        if self.last_instruction_was_branch {
-            // self.flip_branch(pc);
-        }
         match inst.get_mnemonic() {
             OPCode::Goto => {
-                // println!("Found Goto instruction");
                 let offset = match inst.nth(0) {
                     Some(Value::Int(v)) => v,
                     _ => panic!(
                         "Expected Goto to have at least one integer parameter"
                     ),
                 };
+                // Forward branch, aborting.
                 if offset > 0 {
-                    println!("Found forward branch, aborting");
                     return;
                 } else {
                     let mut branch_target = pc;
@@ -161,8 +148,8 @@ impl Recorder {
                 };
                 if self.trace_start.get_method_index() == method_index as usize
                 {
+                    // Found a recursive call, aborting.
                     self.is_recording = false;
-                    println!("Found recursive call -- abort recording");
                     return;
                 }
             }
@@ -352,86 +339,6 @@ impl Recorder {
         Trace {
             start: self.trace_start,
             trace: self.trace.clone(),
-            inner_branch_targets: self.inner_branch_targets.clone(),
-            outer_branch_targets: self.outer_branch_targets.clone(),
-        }
-    }
-
-    /// Prints the recorded trace to stdout.
-    ///
-    /// # Errors
-    /// Returns an error if the underlying calls to `write!` fail.
-    pub fn debug(&self) -> std::fmt::Result {
-        let mut s = String::new();
-        writeln!(&mut s, "---- ------ TRACE ------ ----")?;
-        for record in &self.trace {
-            let inst = &record.inst;
-            write!(&mut s, "{} ", inst.get_mnemonic())?;
-            for param in &inst.get_params() {
-                write!(&mut s, "{param:?} ")?;
-            }
-            writeln!(&mut s)?;
-        }
-        writeln!(&mut s, "---- ------------------- ----")?;
-
-        println!("{s}");
-        Ok(())
-    }
-
-    /// Flip branch condition so the jump occurs if the execution doesn't
-    /// follow the trace.
-    fn flip_branch(&mut self, pc: ProgramCounter) {
-        self.last_instruction_was_branch = false;
-        let Some(branch_entry) = self.trace.pop() else {
-            return;
-        };
-        let mut branch_target = branch_entry.pc;
-        let mut offset = branch_entry.inst.get_params().map_or_else(
-            || panic!("Expected branch target to have parameters"),
-            |params| match &params[0] {
-                Value::Int(m) => m.to_owned(),
-                _ => panic!("Expected branch target index to be i32"),
-            },
-        );
-        branch_target.inc_instruction_index(offset);
-        if branch_target == pc {
-            println!("Flipping branch @ {}", branch_entry.inst.get_mnemonic());
-            offset = 3;
-            branch_target = branch_entry.pc;
-            branch_target.inc_instruction_index(offset);
-            branch_entry.inst.get_params().map_or_else(
-                || panic!("Expected branch target to have parameters"),
-                |mut params| {
-                    if let Some(Value::Int(m)) = params.get_mut(0) {
-                        *m = offset;
-                    }
-                },
-            );
-            let flipped = match branch_entry.inst.get_mnemonic() {
-                OPCode::IfNe => OPCode::IfEq,
-                OPCode::IfGt => OPCode::IfLe,
-                OPCode::IfICmpGe => OPCode::IfICmpLt,
-                OPCode::IfICmpGt => OPCode::IfICmpLe,
-                OPCode::IfICmpLe => OPCode::IfICmpGt,
-                OPCode::IfICmpNe => OPCode::IfICmpEq,
-                _ => unreachable!(
-                    "Found unsupported branch entry {}",
-                    branch_entry.inst
-                ),
-            };
-            println!("Flipped branch is {}", flipped);
-            let new_branch_taget =
-                Instruction::new(flipped, branch_entry.inst.get_params());
-            self.trace.push(Record {
-                pc: branch_entry.pc,
-                inst: new_branch_taget,
-            });
-
-            if offset < 0 {
-                self.inner_branch_targets.insert(branch_target);
-            } else {
-                self.outer_branch_targets.insert(branch_target);
-            }
         }
     }
 }

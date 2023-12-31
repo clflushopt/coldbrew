@@ -224,7 +224,7 @@ impl Instruction {
     /// Returns the nth parameter of an instruction.
     pub fn nth(&self, index: usize) -> Option<Value> {
         match &self.operands {
-            Some(params) => params.get(index).map(|v| return *v),
+            Some(params) => params.get(index).copied(),
             None => None,
         }
     }
@@ -236,7 +236,7 @@ impl Instruction {
 
     // Returns a copy of instruction parameters.
     pub fn get_params(&self) -> Option<Vec<Value>> {
-        return self.operands.clone();
+        self.operands.clone()
     }
 }
 
@@ -294,6 +294,7 @@ pub struct Frame {
     pub pc: ProgramCounter,
     stack: Vec<Value>,
     pub locals: HashMap<usize, Value>,
+    pub max_locals: u16,
 }
 
 impl Frame {
@@ -361,6 +362,7 @@ impl Runtime {
             pc,
             stack: Vec::new(),
             locals: HashMap::new(),
+            max_locals: 0,
         };
         Self {
             program,
@@ -373,8 +375,8 @@ impl Runtime {
         }
     }
 
-    pub fn run(&mut self) -> Result<(), RuntimeError> {
-        'next_inst: loop {
+    pub fn run(&mut self, jit_mode: bool) -> Result<(), RuntimeError> {
+        loop {
             // No more frames, exit.
             if self.frames.is_empty() {
                 break;
@@ -387,29 +389,31 @@ impl Runtime {
             {
                 // TODO: Clean up the naming on trace recoder implementation.
                 let recorded_trace = self.recorder.recording();
-                println!("Reseting recorder state");
                 // TODO: Remove clone once we get rid of stdout trace dump
                 // Cache the trace.
                 self.traces.insert(pc, recorded_trace.clone());
                 // Dump trace to stdout.
+                #[cfg(debug_assertions)]
                 for entry in &recorded_trace.trace {
                     println!("{entry}");
                 }
                 // Compile recorded trace.
                 self.jit_cache.compile(&recorded_trace);
             }
-            if self.jit_cache.has_native_trace(pc) {
-                println!("Entering the Jit @ {pc}");
+            if self.jit_cache.has_native_trace(pc) && jit_mode {
+                #[cfg(debug_assertions)]
+                println!("Jit entry @ {pc}");
                 // If we have a native trace at this pc run it
                 // and capture the return value which is the next
-                // pc to execute.
-                let mut frame = self.frames.last().unwrap().clone();
+                // pc to execute and restore the stack frame.
+                let mut frame = self.frames.pop().unwrap();
                 let cont_pc = self.jit_cache.execute(pc, &mut frame);
-                println!("Exiting the Jit @ {cont_pc}");
-                // Continue execution with updated PC.
-                break 'next_inst;
+                self.frames.push(frame);
+                #[cfg(debug_assertions)]
+                println!("Jit exit @ {cont_pc}");
+                // Return execution to the interpreter.
+                continue;
             } else {
-                // println!("Interpreting");
                 let inst = self.fetch();
                 self.profiler.count_entry(&pc);
 
@@ -422,11 +426,12 @@ impl Runtime {
                 if self.recorder.is_recording() {
                     self.recorder.record(pc, inst.clone());
                 }
-                // println!("Evaling instruction @ {pc}");
+                #[cfg(debug_assertions)]
+                println!("eval {inst} @ {pc}");
+                // Evaluate the instruction.
                 self.eval(&inst)?
             }
         }
-        // let _ = self.recorder.debug();
         Ok(())
     }
 
@@ -484,59 +489,59 @@ impl Runtime {
             match inst.mnemonic {
                 OPCode::IconstM1 => {
                     self.push(Value::Int(-1));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Iconst0 => {
                     self.push(Value::Int(0));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Iconst1 => {
                     self.push(Value::Int(1));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Iconst2 => {
                     self.push(Value::Int(2));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Iconst3 => {
                     self.push(Value::Int(3));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Iconst4 => {
                     self.push(Value::Int(4));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Iconst5 => {
                     self.push(Value::Int(5));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Lconst0 => {
                     self.push(Value::Long(0));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Lconst1 => {
                     self.push(Value::Long(1));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Fconst0 => {
                     self.push(Value::Float(0.));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Fconst1 => {
                     self.push(Value::Float(1.));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Fconst2 => {
                     self.push(Value::Float(2.));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Dconst0 => {
                     self.push(Value::Double(0.));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::Dconst1 => {
                     self.push(Value::Double(1.));
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::BiPush
                 | OPCode::SiPush
@@ -544,7 +549,7 @@ impl Runtime {
                 | OPCode::Ldc2W => match &inst.operands {
                     Some(params) => {
                         self.push(params[0]);
-                        return Ok(());
+                        Ok(())
                     }
                     None => Err(RuntimeError {
                         kind: RuntimeErrorKind::MissingOperands(inst.mnemonic),
@@ -565,7 +570,7 @@ impl Runtime {
                     |params| match params.get(0) {
                         Some(Value::Int(v)) => {
                             self.load(*v as usize);
-                            return Ok(());
+                            Ok(())
                         }
                         _ => Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidOperandType(
@@ -579,28 +584,28 @@ impl Runtime {
                 | OPCode::FLoad0
                 | OPCode::DLoad0 => {
                     self.load(0);
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::ILoad1
                 | OPCode::LLoad1
                 | OPCode::FLoad1
                 | OPCode::DLoad1 => {
                     self.load(1);
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::ILoad2
                 | OPCode::LLoad2
                 | OPCode::FLoad2
                 | OPCode::DLoad2 => {
                     self.load(2);
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::ILoad3
                 | OPCode::LLoad3
                 | OPCode::FLoad3
                 | OPCode::DLoad3 => {
                     self.load(3);
-                    return Ok(());
+                    Ok(())
                 }
                 // Store operations.
                 OPCode::IStore
@@ -617,7 +622,7 @@ impl Runtime {
                     |params| match params.get(0) {
                         Some(Value::Int(v)) => {
                             self.store(*v as usize);
-                            return Ok(());
+                            Ok(())
                         }
                         _ => Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidOperandType(
@@ -631,28 +636,28 @@ impl Runtime {
                 | OPCode::FStore0
                 | OPCode::DStore0 => {
                     self.store(0);
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::IStore1
                 | OPCode::LStore1
                 | OPCode::FStore1
                 | OPCode::DStore1 => {
                     self.store(1);
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::IStore2
                 | OPCode::LStore2
                 | OPCode::FStore2
                 | OPCode::DStore2 => {
                     self.store(2);
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::IStore3
                 | OPCode::LStore3
                 | OPCode::FStore3
                 | OPCode::DStore3 => {
                     self.store(3);
-                    return Ok(());
+                    Ok(())
                 }
                 // Arithmetic operations.
                 OPCode::IAdd | OPCode::LAdd | OPCode::FAdd | OPCode::DAdd => {
@@ -661,7 +666,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         self.push(Value::add(&a, &b));
-                        return Ok(());
+                        Ok(())
                     } else {
                         Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidValue,
@@ -674,7 +679,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         self.push(Value::sub(&a, &b));
-                        return Ok(());
+                        Ok(())
                     } else {
                         Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidValue,
@@ -687,7 +692,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         self.push(Value::mul(&a, &b));
-                        return Ok(());
+                        Ok(())
                     } else {
                         Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidValue,
@@ -700,7 +705,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         self.push(Value::div(&a, &b));
-                        return Ok(());
+                        Ok(())
                     } else {
                         Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidValue,
@@ -713,7 +718,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         self.push(Value::rem(&a, &b));
-                        return Ok(());
+                        Ok(())
                     } else {
                         Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidValue,
@@ -764,22 +769,22 @@ impl Runtime {
                 OPCode::L2I | OPCode::F2I | OPCode::D2I => {
                     let val = self.pop();
                     self.push(val.expect("expected value").to_int());
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::I2F | OPCode::L2F | OPCode::D2F => {
                     let val = self.pop();
                     self.push(val.expect("expected value").to_float());
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::I2D | OPCode::L2D | OPCode::F2D => {
                     let val = self.pop();
                     self.push(val.expect("expected value").to_double());
-                    return Ok(());
+                    Ok(())
                 }
                 OPCode::I2L | OPCode::F2L | OPCode::D2L => {
                     let val = self.pop();
                     self.push(val.expect("expected value").to_long());
-                    return Ok(());
+                    Ok(())
                 }
                 // Comparison operations.
                 OPCode::LCmp
@@ -792,7 +797,7 @@ impl Runtime {
 
                     if let (Some(a), Some(b)) = (lhs, rhs) {
                         self.push(Value::Int(Value::compare(&a, &b)));
-                        return Ok(());
+                        Ok(())
                     } else {
                         Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidValue,
@@ -1068,7 +1073,7 @@ impl Runtime {
                     );
 
                     self.jump(relative_offset);
-                    return Ok(());
+                    Ok(())
                 }
                 // Return with value.
                 OPCode::IReturn
@@ -1080,7 +1085,7 @@ impl Runtime {
                         // This is for debugging purposes.
                         self.return_values.push(value);
                         self.push(value);
-                        return Ok(());
+                        Ok(())
                     } else {
                         Err(RuntimeError {
                             kind: RuntimeErrorKind::InvalidValue,
@@ -1104,7 +1109,7 @@ impl Runtime {
                         _ => panic!("InvokeStatic expected parameters"),
                     };
                     self.invoke(*name_index as usize);
-                    return Ok(());
+                    Ok(())
                 }
                 // Currently only supports System.out.println.
                 OPCode::InvokeVirtual => {
@@ -1132,6 +1137,7 @@ impl Runtime {
         let method_index = frame.method_index();
         let code = self.program.code(method_index);
         let bc = code[frame.instruction_index()];
+        frame.max_locals = self.program.max_locals(method_index);
         frame.inc_instruction_index();
         bc
     }
@@ -1148,6 +1154,7 @@ impl Runtime {
     /// and pushing the new frame into the runtime stack.
     fn invoke(&mut self, method_name_index: usize) {
         let method = &self.program.methods[method_name_index];
+        let max_locals = method.max_locals;
         let stack = vec![];
         let mut locals = HashMap::new();
         let arg_types = method.arg_types.clone();
@@ -1163,7 +1170,12 @@ impl Runtime {
             instruction_index: 0,
             method_index: method_name_index,
         };
-        let frame = Frame { pc, stack, locals };
+        let frame = Frame {
+            pc,
+            stack,
+            locals,
+            max_locals,
+        };
         self.frames.push(frame);
     }
 
@@ -1324,7 +1336,7 @@ mod tests {
                     assert!(class_file.is_ok());
                     let program = Program::new(&class_file.unwrap());
                     let mut runtime = Runtime::new(program);
-                    assert!(runtime.run().is_ok());
+                    assert!(runtime.run(false).is_ok());
                     assert_eq!(runtime.top_return_value(), $expected);
                 }
             }

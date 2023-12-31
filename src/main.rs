@@ -8,14 +8,16 @@ use coldbrew::runtime::Runtime;
 const USAGE_CMD: &str = "
     Coldbrew Tracing JIT usage guide :
 
-    Run `coldbrew unit` to run small test programs.
-    Run `coldbrew integration` to run end to end CPU intensive test programs.
+    Run `coldbrew unit` to run small test programs (interpreter only).
+    Run `coldbrew integration` to run end to end CPU intensive test programs (interpreter only).
+    Run `coldbrew jit` to run small test programs with hot loops (interpreter + tracing jit).
     Run `coldbrew help` to see this message.
 ";
 
 fn main() {
     // Decide which test files to run.
     let args: Vec<String> = env::args().collect();
+    let jit_mode = args[1].as_str() == "jit";
     assert!(
         (args.len() >= 2),
         "Unexpected argument use `coldbrew help` to see usage guide."
@@ -73,7 +75,7 @@ fn main() {
 
         let program = Program::new(&class_file);
         let mut runtime = Runtime::new(program);
-        match runtime.run() {
+        match runtime.run(jit_mode) {
             Ok(()) => {
                 println!(
                     "[+] Program {:?} finished running successfully !",
