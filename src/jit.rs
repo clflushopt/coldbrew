@@ -1,6 +1,5 @@
 //! JIT compiler for coldrew targeting x86_64.
 use std::collections::{HashMap, VecDeque};
-use std::io::Read;
 
 use crate::bytecode::OPCode;
 use crate::runtime::{Frame, ProgramCounter, Value};
@@ -43,9 +42,9 @@ enum Register {
     R15,
 }
 
-/// Intel x86-64 shorthand for arithmetic opcodes.
+/// Intel x86-64 shorthand for instructions.
 #[derive(Debug, Clone, Copy)]
-enum Op {
+enum Inst {
     Add,
     Sub,
     IMul,
@@ -351,7 +350,7 @@ impl JitCache {
                     dynasm!(ops
                         ; =>inst_label
                     );
-                    self.emit_arithmetic(&mut ops, Op::Add);
+                    self.emit_arithmetic(&mut ops, Inst::Add);
                 }
                 OPCode::ISub => {
                     println!("Compiling an isub");
@@ -359,7 +358,7 @@ impl JitCache {
                     dynasm!(ops
                         ; =>inst_label
                     );
-                    self.emit_arithmetic(&mut ops, Op::Sub);
+                    self.emit_arithmetic(&mut ops, Inst::Sub);
                 }
                 OPCode::IMul => {
                     println!("Compiling an imul");
@@ -367,7 +366,7 @@ impl JitCache {
                     dynasm!(ops
                         ; =>inst_label
                     );
-                    self.emit_arithmetic(&mut ops, Op::IMul);
+                    self.emit_arithmetic(&mut ops, Inst::IMul);
                 }
                 OPCode::IDiv => {
                     println!("Compiling an idiv");
@@ -375,7 +374,7 @@ impl JitCache {
                     dynasm!(ops
                         ; =>inst_label
                     );
-                    self.emit_arithmetic(&mut ops, Op::IDiv);
+                    self.emit_div(&mut ops, Inst::IDiv);
                 }
                 OPCode::IRem => {
                     println!("Compiling an iadd");
@@ -383,7 +382,7 @@ impl JitCache {
                     dynasm!(ops
                         ; =>inst_label
                     );
-                    self.emit_arithmetic(&mut ops, Op::IRem);
+                    self.emit_div(&mut ops, Inst::IRem);
                 }
                 OPCode::IInc => {
                     println!("Compiling an iinc");
@@ -511,9 +510,9 @@ impl JitCache {
         }
     }
 
-    /// Emit an arithmetic operation, covers all simple instructions such as
+    /// Emit an arithmetic operation, covers only simple instructions such as
     /// `add`, `mul` and `sub`.
-    fn emit_arithmetic(&mut self, ops: &mut Assembler, op: Op) {
+    fn emit_arithmetic(&mut self, ops: &mut Assembler, op: Inst) {
         let rhs = match self.operands.pop() {
             Some(rhs) => rhs,
             None => panic!("expected operand found None"),
@@ -547,26 +546,69 @@ impl JitCache {
             unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
         };
         match op {
-            Op::Add => {
+            Inst::Add => {
                 #[cfg(target_arch = "x86_64")]
                 dynasm!(ops
                         ; add Rq(dst as u8), Rq(src as u8)
                 );
             }
-            Op::Sub => {
+            Inst::Sub => {
                 #[cfg(target_arch = "x86_64")]
                 dynasm!(ops
                         ; sub Rq(dst as u8), Rq(src as u8)
                 );
             }
-            Op::IMul => {
+            Inst::IMul => {
                 #[cfg(target_arch = "x86_64")]
                 dynasm!(ops
                         ; imul Rd(dst as u8), Rd(src as u8)
                 );
             }
-            _ => todo!(),
+            _ => unreachable!("emit_arithmetic only supports simple x86-64 arithmetic (add, sub and mul).)"),
         }
+    }
+
+    /// Emit division operation.
+    fn emit_div(&mut self, ops: &mut Assembler, op: Inst) {
+        let rdx = Register::Rdx;
+        let rax = Register::Rax;
+
+        let denom = match self.operands.pop() {
+            Some(operand) => operand,
+            _ => {
+                unreachable!("Expected operand for `idiv` and `irem` got None")
+            }
+        };
+
+        let nom = self.free_register();
+
+        let dst = match denom {
+            Operand::Register(reg) => Operand::Register(reg),
+            _ => {
+                let reg = self.first_available_register();
+                JitCache::emit_mov(ops, &reg, &denom);
+                reg
+            }
+        };
+
+        let src = match op {
+            // x86 division rax holds divident rdx holds modulo.
+            Inst::IDiv => rax,
+            Inst::IRem => rdx,
+            _ => unreachable!("emit_div expected op to be idiv or irem"),
+        };
+
+        #[cfg(target_arch = "x86_64")]
+        let Operand::Register(dst_reg) = dst
+        else {
+            unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
+        };
+        dynasm!(ops
+            ; mov Rq(rdx as u8), 0
+            ; div Rq(dst_reg as u8)
+        );
+        JitCache::emit_mov(ops, &dst, &Operand::Register(src));
+        self.operands.push(dst);
     }
 
     /// Returns the first available register.
