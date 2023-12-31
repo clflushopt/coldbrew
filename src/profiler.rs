@@ -19,7 +19,7 @@ impl Profiler {
     pub fn new() -> Profiler {
         Profiler {
             threshold: 1,
-            last_pc: ProgramCounter::new(),
+            last_pc: ProgramCounter::default(),
             records: HashMap::new(),
         }
     }

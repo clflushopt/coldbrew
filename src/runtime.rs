@@ -244,8 +244,8 @@ impl Instruction {
 /// and method we're executing.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ProgramCounter {
-    instruction_index: usize,
     method_index: usize,
+    instruction_index: usize,
 }
 
 impl fmt::Display for ProgramCounter {
@@ -259,10 +259,11 @@ impl fmt::Display for ProgramCounter {
 }
 
 impl ProgramCounter {
-    pub fn new() -> Self {
+    /// Create a new program counter object at the given method and instruction index.
+    pub fn new(method_index: usize, instruction_index: usize) -> Self {
         Self {
-            instruction_index: 0,
-            method_index: 0,
+            method_index,
+            instruction_index,
         }
     }
 
@@ -282,7 +283,7 @@ impl ProgramCounter {
 
 impl Default for ProgramCounter {
     fn default() -> Self {
-        Self::new()
+        Self::new(0, 0)
     }
 }
 
@@ -391,13 +392,13 @@ impl Runtime {
                 // Cache the trace.
                 self.traces.insert(pc, recorded_trace.clone());
                 // Dump trace to stdout.
-                for entry in recorded_trace.trace {
+                for entry in &recorded_trace.trace {
                     println!("{entry}");
                 }
                 // Compile recorded trace.
-                // self.jit_cache.compile(&recorded_trace);
+                self.jit_cache.compile(&recorded_trace);
             }
-            if self.jit_cache.has_native_trace(pc) {
+            if false {
                 println!("Entering the Jit @ {pc}");
                 // If we have a native trace at this pc run it
                 // and capture the return value which is the next

@@ -1,13 +1,16 @@
 //! JIT compiler for coldrew targeting x86_64.
 use std::collections::{HashMap, VecDeque};
+use std::io::Read;
 
 use crate::bytecode::OPCode;
 use crate::runtime::{Frame, ProgramCounter, Value};
 use crate::trace::Trace;
 
 use dynasmrt::x64::Assembler;
-use dynasmrt::{dynasm, DynamicLabel};
-use dynasmrt::{AssemblyOffset, DynasmApi, ExecutableBuffer};
+use dynasmrt::{
+    dynasm, AssemblyOffset, DynamicLabel, DynasmApi, DynasmLabelApi,
+    ExecutableBuffer,
+};
 
 /// Intel x86-64 registers, ordered by their syntactic order in the Intel
 /// manuals. The usage of the registers follows the System ADM64 ABI.
@@ -281,7 +284,7 @@ impl JitCache {
             // Record the instruction program counter to a new label.
             let inst_label = ops.new_dynamic_label();
             let _ = self.labels.insert(entry.pc(), inst_label);
-            println!("Record label {} @ {}", inst_label.get_id(), entry.pc());
+            println!("Recorded label {} @ {}", inst_label.get_id(), entry.pc());
             match entry.instruction().get_mnemonic() {
                 // Load operation loads a constant from the locals array at
                 // the position given by the opcode's operand.
@@ -301,6 +304,11 @@ impl JitCache {
                         _ => unreachable!("Operand to iload (index in locals) must be int in current implementation")
                     };
                     let dst = self.first_available_register();
+
+                    #[cfg(target_arch = "x86_64")]
+                    dynasm!(ops
+                        ; =>inst_label
+                    );
                     Self::emit_mov(
                         &mut ops,
                         &dst,
@@ -320,6 +328,9 @@ impl JitCache {
                             _ => unreachable!("Operand to istore (index in locals) must be int in current implementation")
                     };
                     if let Some(src) = self.free_register() {
+                        dynasm!(ops
+                            ; =>inst_label
+                        );
                         Self::emit_mov(
                             &mut ops,
                             &Operand::Memory(Register::Rdi, 8 * value),
@@ -336,22 +347,42 @@ impl JitCache {
                 }
                 OPCode::IAdd => {
                     println!("Compiling an iadd");
+                    #[cfg(target_arch = "x86_64")]
+                    dynasm!(ops
+                        ; =>inst_label
+                    );
                     self.emit_arithmetic(&mut ops, Op::Add);
                 }
                 OPCode::ISub => {
                     println!("Compiling an isub");
+                    #[cfg(target_arch = "x86_64")]
+                    dynasm!(ops
+                        ; =>inst_label
+                    );
                     self.emit_arithmetic(&mut ops, Op::Sub);
                 }
                 OPCode::IMul => {
                     println!("Compiling an imul");
+                    #[cfg(target_arch = "x86_64")]
+                    dynasm!(ops
+                        ; =>inst_label
+                    );
                     self.emit_arithmetic(&mut ops, Op::IMul);
                 }
                 OPCode::IDiv => {
                     println!("Compiling an idiv");
+                    #[cfg(target_arch = "x86_64")]
+                    dynasm!(ops
+                        ; =>inst_label
+                    );
                     self.emit_arithmetic(&mut ops, Op::IDiv);
                 }
                 OPCode::IRem => {
                     println!("Compiling an iadd");
+                    #[cfg(target_arch = "x86_64")]
+                    dynasm!(ops
+                        ; =>inst_label
+                    );
                     self.emit_arithmetic(&mut ops, Op::IRem);
                 }
                 OPCode::IInc => {
@@ -365,6 +396,9 @@ impl JitCache {
                         _ => unreachable!("Second operand to iinc (constant for increment) must be int in current implementation")
                     };
                     #[cfg(target_arch = "x86_64")]
+                    dynasm!(ops
+                        ; =>inst_label
+                    );
                     dynasm!(ops
                         ; add [Rq(Register::Rdi as u8) + 8 * index], constant as _
                     );
@@ -385,6 +419,22 @@ impl JitCache {
                     // }
                     // If the Goto target is outside then abondon this trace.
                     //
+                    let target = match entry.instruction().nth(0) {
+                        Some(Value::Int(x)) => x,
+                            _ => unreachable!("First operand to goto (relative offset) must be int")
+                    };
+                    println!("Compiling a goto");
+                    if let Some(label) = self.labels.get(&ProgramCounter::new(
+                        entry.pc().get_method_index(),
+                        (entry.pc().get_instruction_index() as isize
+                            + target as isize) as usize,
+                    )) {
+                        println!("Found target label {}", label.get_id());
+                        #[cfg(target_arch = "x86_64")]
+                        dynasm!(ops
+                            ; jmp =>*label
+                        );
+                    }
                 }
                 _ => println!(
                     "Found opcode : {:}",
@@ -402,6 +452,19 @@ impl JitCache {
         println!("Exit PC {}", exit_pc);
         // println!("Compiled trace @ {pc}");
         let buf = ops.finalize().unwrap();
+        // Because you can't have randomness without YAFC
+        // HAXOR START
+        println!("Dumping jit result to disk");
+        use std::fs::File;
+        use std::io::Write;
+        let dummy = vec![1, 2, 3, 4, 5];
+        let addr = &dummy as *const _ as usize;
+        let filename = format!("test-{addr}.bin");
+        let mut testfile = File::create(&filename).unwrap();
+        let _ = testfile.write_all(&buf.to_vec());
+        println!("Dumped jitted code to {filename}");
+        // HAXOR DONE
+
         let native_trace = NativeTrace(offset, buf);
         self.traces.insert(pc, native_trace);
         // println!("Added trace to native traces");

@@ -62,8 +62,8 @@ impl Default for Recorder {
 impl Recorder {
     pub fn new() -> Self {
         Self {
-            trace_start: ProgramCounter::new(),
-            loop_header: ProgramCounter::new(),
+            trace_start: ProgramCounter::default(),
+            loop_header: ProgramCounter::default(),
             is_recording: false,
             last_instruction_was_branch: false,
             trace: Vec::new(),
