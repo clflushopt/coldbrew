@@ -210,7 +210,7 @@ impl Recorder {
             | OPCode::DStore3 => {
                 if let Some(value) = Self::get_params(inst.get_mnemonic()) {
                     inst = Instruction::new(
-                        inst.get_mnemonic(),
+                        Self::get_mnemonic(inst.get_mnemonic()),
                         Some(vec![value]),
                     );
                 }
@@ -221,6 +221,61 @@ impl Recorder {
             pc,
             inst: inst.clone(),
         });
+    }
+
+    /// Returns an equivalent mnemonic from the given one.
+    fn get_mnemonic(opcode: OPCode) -> OPCode {
+        match opcode {
+            OPCode::ILoad0
+            | OPCode::ILoad1
+            | OPCode::ILoad2
+            | OPCode::ILoad3 => OPCode::ILoad,
+            OPCode::FLoad0
+            | OPCode::FLoad1
+            | OPCode::FLoad2
+            | OPCode::FLoad3 => OPCode::FLoad,
+            OPCode::LLoad0
+            | OPCode::LLoad1
+            | OPCode::LLoad2
+            | OPCode::LLoad3 => OPCode::LLoad,
+            OPCode::DLoad0
+            | OPCode::DLoad1
+            | OPCode::DLoad2
+            | OPCode::DLoad3 => OPCode::DLoad,
+            OPCode::IStore0
+            | OPCode::IStore1
+            | OPCode::IStore2
+            | OPCode::IStore3 => OPCode::IStore,
+            OPCode::FStore0
+            | OPCode::FStore1
+            | OPCode::FStore2
+            | OPCode::FStore3 => OPCode::FStore,
+            OPCode::LStore0
+            | OPCode::LStore1
+            | OPCode::LStore2
+            | OPCode::LStore3 => OPCode::LStore,
+            OPCode::DStore0
+            | OPCode::DStore1
+            | OPCode::DStore2
+            | OPCode::DStore3 => OPCode::DStore,
+            OPCode::Iconst0
+            | OPCode::Iconst1
+            | OPCode::Iconst2
+            | OPCode::Iconst3
+            | OPCode::Iconst4
+            | OPCode::Iconst5
+            | OPCode::IconstM1
+            | OPCode::Fconst0
+            | OPCode::Fconst1
+            | OPCode::Fconst2 => OPCode::Ldc,
+            OPCode::Lconst0
+            | OPCode::Lconst1
+            | OPCode::Dconst0
+            | OPCode::Dconst1 => OPCode::Ldc2W,
+            _ => unreachable!(
+                "expected only constant load or store got {opcode}"
+            ),
+        }
     }
 
     /// Returns the `jvm::Value` from a given mnemonic.

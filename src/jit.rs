@@ -50,6 +50,9 @@ enum Inst {
     IMul,
     IDiv,
     IRem,
+    Jge,
+    Jg,
+    Jle,
 }
 
 /// Generic representation of assembly operands that allows for supporting
@@ -120,7 +123,19 @@ macro_rules! epilogue {
 #[derive(Debug)]
 pub struct NativeTrace(AssemblyOffset, ExecutableBuffer);
 
-/// `JitCache` is responsible for compiling and caching recorded native traces.
+/// `JitCache` is responsible for compiling, caching and executing the native
+/// traces.
+///
+/// The calling convention for our Jit is the following :
+///
+/// - Rdi & Rsi are used to pass input arguments which are the local variables
+/// in the current frame and a guard program counter which is the entry point
+/// of our native trace.
+///
+/// - Rax, Rbx, Rcx and R9-R15 are used for intermediate operations.
+///
+/// Since every trace is self contained all register allocation is local and
+/// done with a simple queue based scheme.
 pub struct JitCache {
     // Internal cache of available registers.
     registers: VecDeque<Register>,
@@ -236,7 +251,6 @@ impl JitCache {
     /// Compile the trace given as argument and prepare a native trace
     /// for execution.
     ///
-    ///
     /// Compile works as follows :
     /// 1. Build a dynasmrt Assembler object.
     /// 2. Emits a static prologue for the jitted code.
@@ -273,7 +287,7 @@ impl JitCache {
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
         // Prologue for dynamically compiled code.
         let offset = prologue!(ops);
-        let mut exit_pc = 0usize;
+        let mut exit_pc = 0i32;
         // Trace compilation :
         // For now we compile only the prologue and epilogue and ensure that
         // entering the Jit executing the assembled code and leaving the Jit
@@ -314,7 +328,6 @@ impl JitCache {
                         &Operand::Memory(Register::Rdi, 8 * value),
                     );
                     self.operands.push(dst);
-                    exit_pc = entry.pc().get_instruction_index() + 1;
                 }
                 OPCode::IStore
                 | OPCode::IStore0
@@ -435,6 +448,23 @@ impl JitCache {
                         );
                     }
                 }
+                // if_icmp{cond} compares the top two values on the stack
+                // and branches to the target offset given as an operand
+                // if the comparison is not true.
+                // Since our traces are self contained to the loop code
+                // the target offset will be the exit pc value at which
+                // the interpreter should continue execution.
+                OPCode::IfICmpGe | OPCode::IfICmpGt | OPCode::IfICmpLe => {
+                    let target = match entry.instruction().nth(0) {
+                        Some(Value::Int(x)) => x,
+                            _ => unreachable!("First operand to if_icmpge (relative offset) must be int")
+                    };
+                    exit_pc = target;
+                    self.emit_cond_branch(
+                        &mut ops,
+                        entry.instruction().get_mnemonic(),
+                    );
+                }
                 _ => println!(
                     "Found opcode : {:}",
                     entry.instruction().get_mnemonic()
@@ -443,6 +473,7 @@ impl JitCache {
         }
         #[cfg(target_arch = "x86_64")]
         dynasm!(ops
+            ; ->abort_guard:
             ; mov rax, exit_pc as i32
         );
         // Epilogue for dynamically compiled code.
@@ -580,8 +611,9 @@ impl JitCache {
             }
         };
 
-        let nom = self.free_register();
-
+        if let Some(nom) = self.free_register() {
+            JitCache::emit_mov(ops, &Operand::Register(Register::Rax), &nom);
+        }
         let dst = match denom {
             Operand::Register(reg) => Operand::Register(reg),
             _ => {
@@ -611,6 +643,69 @@ impl JitCache {
         self.operands.push(dst);
     }
 
+    /// Emit conditional branch for the given instruction.
+    fn emit_cond_branch(&mut self, ops: &mut Assembler, cond: OPCode) {
+        let op2 = match self.free_register() {
+            Some(operand) => operand,
+            None => panic!("expected operand found None"),
+        };
+        let op1 = match self.free_register() {
+            Some(operand) => operand,
+            None => todo!("Expected register in operand stack found None"),
+        };
+
+        match (op1, op2) {
+            (Operand::Register(lhs), Operand::Register(rhs)) => {
+                dynasm!(ops
+                    ; cmp Rq(lhs as u8), Rq(rhs as u8)
+                );
+            }
+            (Operand::Register(lhs), Operand::Memory(base, offset)) => {
+                dynasm!(ops
+                    ; cmp Rq(lhs as u8), [Rq(base as u8) + offset]
+                );
+            }
+            (Operand::Register(lhs), Operand::Immediate(imm)) => {
+                dynasm!(ops
+                    ; cmp Rq(lhs as u8), imm as _
+                );
+            }
+            (Operand::Memory(base, offset), Operand::Register(rhs)) => {
+                dynasm!(ops
+                    ; cmp [Rq(base as u8) + offset], Rq(rhs as u8)
+                );
+            }
+            (Operand::Memory(base, offset), Operand::Immediate(imm)) => {
+                dynasm!(ops
+                    ; cmp [Rq(base as u8) + offset], imm as _
+                );
+            }
+            _ => unreachable!(
+                "unsupported comparison between operands {:?} and {:?}",
+                op1, op2
+            ),
+        }
+
+        match cond {
+            OPCode::IfICmpGt => {
+                dynasm!(ops
+                    ; jg ->abort_guard
+                );
+            }
+            OPCode::IfICmpGe => {
+                dynasm!(ops
+                    ; jge ->abort_guard
+                );
+            }
+            OPCode::IfICmpLe => {
+                dynasm!(ops
+                    ; jle -> abort_guard
+                );
+            }
+            _ => unreachable!("Expected instruction for conditional branch to be a if_icmp<cond> {:?}", cond)
+        }
+    }
+
     /// Returns the first available register.
     fn first_available_register(&mut self) -> Operand {
         if !self.registers.is_empty() {
@@ -623,6 +718,7 @@ impl JitCache {
 
     /// Free the top most register in the operand stack.
     fn free_register(&mut self) -> Option<Operand> {
+        println!("Self::operands: {:?}", self.operands);
         let op = self.operands.pop();
 
         if let Some(op) = op {
