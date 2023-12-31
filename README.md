@@ -1,21 +1,23 @@
 # coldbrew
 
-`coldbrew` is a (WIP) tracing JIT compiler for the Java Virtual Machine, with
+`coldbrew` is a tracing JIT compiler for the Java Virtual Machine, with
 support for primitive numeric types (`int`, `long`, `float`, `double`) and
 serves as a demo project for how JIT compilers work in genenral.
 
+Currently `coldbrew` is able to successfully interpret, record, compile and
+execute native code on x86-64 for some very simple demo programs e.g `support/jit`.
+
 `coldbrew` is inspired primarly by TigerShrimp[^1] and some ideas from Higgs[^2]
-the TigerShrimp C++ implementation[^3] is very readable and was of huge help
-to debug some issues along the line.
+the TigerShrimp C++ implementation[^3] is very readable and was of huge help. 
 
 Other implementations I've found useful is LuaJIT 2.0 and Mike Pall's email
 about the LuaJIT internals which you can in the mailing list[^4].
 
 While I tried to remain as close as the TigerShrimp implementation as possible,
-there are some changes in the overall structure since we are using Rust.
+there are some changes such as (trace recording logic is different, we don't
+support trace stitching and we want to maybe add support for inlining calls).
 
-I was planning to start with ARM64[^5] then do x86 but I changed machines and
-basically refactored the code to start with x86 support.
+It's possible support for ARM64 will be added in the future.
 
 I was originally planning to use the C++ implementation as a baseline to test
 against but I didn't have much success building it.
@@ -26,11 +28,20 @@ against but I didn't have much success building it.
 as per the Java SE7 specification described in the link below[^6], during the
 execution the bytecode is profiled and execution traces are recorded.
 
+The recorded traces are self-contained with backwards branches and inner branches
+only. Ideally we want to make this even more self-contained by recording just
+basic blocks.
+
 The trace contains all the information needed to compile the bytecode to native
-such as the entry, exit codes and the bytecode of the core loop. Once a trace
-is ready we pipeline it to the JIT cache for compilation and cachine, when we
-reach that code path again, execution leaves the VM and executes the compiled
-native trace before returning control to the VM.
+such as the entry, exit codes and the bytecode of the core loop. 
+
+Once a trace is ready we pipeline it to the JIT cache for compilation and when we
+reach that code path again (loop entry) execution leaves the interpreter and executes
+the compiled native trace.
+
+When a compiled trace finishes executing we overwrite the interpreter current stack
+frame to record all mutations that happened in native code then execution is returned
+to the interpreter again.
 
 ### Trace recording and execution
 
@@ -41,124 +52,92 @@ the loop.
 
 But it's not sufficient to track *backwards branches* we need to calculate
 their execution frequency to identify if they are *hot*, the invocation frequency
-threshold (currently set to 2) triggewrs the start of recording.
+threshold (currently set to 1) triggewrs the start of recording.
 
-An example of a trace would be a sequence of bytecode like this :
-
-```asm
-
-iload_1
-sipush 1000
-if_icmpge B
-iinc 2, 1
-iinc 1, 1
-goto A
-
-```
-
-But the above trace contains two exits, the first to label `B` and the second
-to label `A` so the tracelets would be essentially what is in between.
+An example of a trace would be a sequence of bytecode like the one below, the
+format is `Inst(opcode, operands) @ PC`:
 
 ```asm
 
-iload_1
-sipush 1000
+Inst(iload, Some([Int(2)])) @ Instruction Index 6 @ Method Index: 11
+Inst(bipush, Some([Int(10)])) @ Instruction Index 7 @ Method Index: 11
+Inst(if_icmpgt, Some([Int(13)])) @ Instruction Index 9 @ Method Index: 11
+Inst(iload, Some([Int(1)])) @ Instruction Index 12 @ Method Index: 11
+Inst(iload, Some([Int(2)])) @ Instruction Index 13 @ Method Index: 11
+Inst(iadd, None) @ Instruction Index 14 @ Method Index: 11
+Inst(istore, Some([Int(1)])) @ Instruction Index 15 @ Method Index: 11
+Inst(iinc, Some([Int(2), Int(1)])) @ Instruction Index 16 @ Method Index: 11
+Inst(goto, Some([Int(-13)])) @ Instruction Index 19 @ Method Index: 11
+Trace dump: Inst(iload, Some([Int(2)])) @ Instruction Index 6 @ Method Index: 11
 
 ```
+
+As you can see the above trace is entirely self-contained, the `goto` instruction
+is a backwards branch to the loop entry, there are no outer or forward branches.
+
+Ideally in a tracing JIT you might want to replace the comparison instruction by
+speculatively executing under the assumption that the condition is true. This is
+done in many production tracing JITs were guard clauses are introduced to assert
+the condition.
+
+In our case we don't do any of that we simply compile the code as is, the above
+bytecode results in the following assembly (comments added for clarification). 
+
 
 ```asm
 
-iinc 2, 1
-iinc 1, 1
+; epilogue
+00000000  55                push rbp
+00000001  4889E5            mov rbp,rsp
+; this is not needed since we don't clobber rdi or rsi
+00000004  48897DE8          mov [rbp-0x18],rdi
+00000008  488975E0          mov [rbp-0x20],rsi
+; loop entry
+0000000C  488B842710000000  mov rax,[rdi+0x10]
+00000014  4881F80A000000    cmp rax,0xa
+; loop condition i <= 10
+0000001B  0F8F29000000      jg near 0x4a
+; loop code.
+00000021  488B8C2708000000  mov rcx,[rdi+0x8]
+00000029  4C8B842710000000  mov r8,[rdi+0x10]
+00000031  4C01C1            add rcx,r8
+00000034  48898C2708000000  mov [rdi+0x8],rcx
+0000003C  4080842710000000  add byte [rdi+0x10],0x1
+         -01
+; go back to the loop entry (equivalent to goto)
+00000045  E9C2FFFFFF        jmp 0xc
+; 0xd is the program counter of the target instruction of if_icmpge above
+; this is preloaded and known at compile time and we don't need to inject
+; it.
+0000004A  48C7C00D000000    mov rax,0xd
+00000051  5D                pop rbp
+00000052  C3                ret
 
 ```
 
-We could take this one step further and do something similar to speculative
-execution, where at the `B` branch `if_icmpge B` we record a hint to whether
-the branch should be taken or not. If the branch is not taken we can *stitch*
-both tracelets and use the hint as a guard instruction. This is implemented
-in `flip_branch` where we flip the branch instruction during recording and
-use it as an implicit guard during the runtime. If a guard instruction fails
-at runtime then control is transfered back to the virtual machine interpreter
-and resumes execution. This is where the need for *side exits* comes up because
-when transfer control back to the VM any state mutations to local variables
-need to be written back to the VM current frame.
+The above is the relocation free version, emitted by [dynasm-rs](https://github.com/CensoredUsername/dynasm-rs).
 
-So the above trace ends up as such :
-
-```asm
-
-1: iload_1
-2: sipush 1000
-3: if_icmpge .exit
-4: iinc 1,1
-5: iinc 0,1
-6: goto 3
-.exit :
-    trap
-
-```
-
-Where `trap` is a pseudo instructions that signals the JIT to transfer control
-back to the virtual machine. We also do a label swap where use relative in-trace
-offsets, this is essentialy since when we compile `goto` at line 6 we need to
-jump to a label that exists within the trace. One way to solve this is to create
-a local map of `{pc, label}` where we compile `goto 3` as `jmp .label_3` where
-`.label_3` would be created during the initial recording. Other way to solve this
-is to generate the code in reverse which allows you to encounter the target branch
-in this case `goto 3` before the actual target which eliminates the need for the stub
-technique we mentionned which requires keeping track of all inner branches.
-
-Recording bytecode aborts whenever we encounter a non recoverable state this
-involves native method invocations, exceptions and recursive functions.
+*Note*: Special thanks to `dynasm-rs` author for an exellent and pleasent to use dynamic
+assembler.
 
 When it comes to executing the trace we assemble the native trace using `dynasm`
 and record it as a pointer to a function with the following signature.
 
-```rust
-
-fn execute(*mut i32, *mut u8) -> i32
-
-```
-
-The first argument is a pointer to the local variables which we cast to `i32`
-this is done mainly because we used `enum Value` to represent dynamic values
-and we don't control the memory layout of the enums (plus it's simpler).
-
-The second argument is a pointer to the existing traces and this is used to
-to keep executing if the exit program counter is another trace that we have
-already prepared.
-
-Once execution is complete we overwrite the current VM frame local variables
-array with the ones we passed to `execute` which you will notice is set as
-*mutable*. This is how we "save" mutated local state when exiting the JIT.
-
 ## Going Further
 
-It is possible to take this approach even further by incorporating analysis
-within the trace recording phase. Essentially once you've recorded a trace
-you could transform it to SSA form and run any kind of analysis or optimization
-such as Dead-Code Elimination, Common Subexpression Elimination, Constant folding
-and Inlining and much more.
+I might possibly keep working on this but if you would like a challenge
+here are some ideas :
 
-## Performance Analysis
-
-The following flamegraph shows the initial implementation performance on the
-integration test suite.
-
-![Flamegraph of initial performance](./perf/flamegraph.svg)
-
-This was recorded without debug prints and show that we spend a lot of time in
-`fetch` this was due to using a `HashMap` for recording code sections in the JVM
-class file.
-
-The first thing that came to mind was to switch to using a `Vec` this improved
-perf quite a bit and we went from spending 37% of the time in `fetch` to about
-4%. Now the biggest bottleneck was the `JitCache::compile` function (but since
-we try and compile everything) this was quite expected. Once we change how often
-we compile we can build and stitch larger traces.
-
-![Flamegraph after using Vec instead of HashMap](./perf/flamegraph-fetch-improv-nostdout.svg)
+- Handle nested loops.
+- Inline invoked functions (currently we abort traces that do function calls
+  but under certain heuristics we can pretty much compile simple functions)
+- Add an IR then compile and optimize the IR before compiling to assembly
+  this offers you the opportunity for DCE, Algebraic Simplification, Constant
+  Folding, Loop Unrolling (the list goes on really).
+- Rewrite the tracer to build tracelets instead (basic blocks) then do trace
+  splatting with branch flipping to really speed up things.
+- Add support for trace stitching
+- Add ARM64 support
 
 ## Acknowledgments
 
