@@ -40,6 +40,16 @@ enum Register {
     R15,
 }
 
+/// Intel x86-64 shorthand for arithmetic opcodes.
+#[derive(Debug, Clone, Copy)]
+enum Op {
+    Add,
+    Sub,
+    IMul,
+    IDiv,
+    IRem,
+}
+
 /// Generic representation of assembly operands that allows for supporting
 /// both x86 and ARM64.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -285,13 +295,13 @@ impl JitCache {
                 | OPCode::ILoad1
                 | OPCode::ILoad2
                 | OPCode::ILoad3 => {
-                    println!("Compiling an ILoad");
+                    println!("Compiling an iload");
                     let value = match entry.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
-                        _ => todo!(),
+                        _ => unreachable!("Operand to iload (index in locals) must be int in current implementation")
                     };
                     let dst = self.first_available_register();
-                    Self::emit_load(
+                    Self::emit_mov(
                         &mut ops,
                         &dst,
                         &Operand::Memory(Register::Rdi, 8 * value),
@@ -299,8 +309,65 @@ impl JitCache {
                     self.operands.push(dst);
                     exit_pc = entry.pc().get_instruction_index() + 1;
                 }
+                OPCode::IStore
+                | OPCode::IStore0
+                | OPCode::IStore1
+                | OPCode::IStore2
+                | OPCode::IStore3 => {
+                    println!("Compiling an istore");
+                    let value = match entry.instruction().nth(0) {
+                        Some(Value::Int(x)) => x,
+                            _ => unreachable!("Operand to istore (index in locals) must be int in current implementation")
+                    };
+                    if let Some(src) = self.free_register() {
+                        Self::emit_mov(
+                            &mut ops,
+                            &Operand::Memory(Register::Rdi, 8 * value),
+                            &src,
+                        );
+                    }
+                }
+                OPCode::BiPush | OPCode::SiPush | OPCode::Ldc => {
+                    let imm = match entry.instruction().nth(0) {
+                        Some(Value::Int(imm)) => imm,
+                        _ => unreachable!("Operand to {} must be an int in current implementation", entry.instruction().get_mnemonic())
+                    };
+                    self.operands.push(Operand::Immediate(imm));
+                }
                 OPCode::IAdd => {
-                    println!("Compiling an IAdd");
+                    println!("Compiling an iadd");
+                    self.emit_arithmetic(&mut ops, Op::Add);
+                }
+                OPCode::ISub => {
+                    println!("Compiling an isub");
+                    self.emit_arithmetic(&mut ops, Op::Sub);
+                }
+                OPCode::IMul => {
+                    println!("Compiling an imul");
+                    self.emit_arithmetic(&mut ops, Op::IMul);
+                }
+                OPCode::IDiv => {
+                    println!("Compiling an idiv");
+                    self.emit_arithmetic(&mut ops, Op::IDiv);
+                }
+                OPCode::IRem => {
+                    println!("Compiling an iadd");
+                    self.emit_arithmetic(&mut ops, Op::IRem);
+                }
+                OPCode::IInc => {
+                    println!("Compiling an iinc");
+                    let index = match entry.instruction().nth(0) {
+                        Some(Value::Int(x)) => x,
+                            _ => unreachable!("First operand to iinc (index in locals) must be int")
+                    };
+                    let constant = match entry.instruction().nth(1) {
+                        Some(Value::Int(x)) => x,
+                        _ => unreachable!("Second operand to iinc (constant for increment) must be int in current implementation")
+                    };
+                    #[cfg(target_arch = "x86_64")]
+                    dynasm!(ops
+                        ; add [Rq(Register::Rdi as u8) + 8 * index], constant as _
+                    );
                 }
                 OPCode::Goto => {
                     // let target = match ...
@@ -340,33 +407,6 @@ impl JitCache {
         // println!("Added trace to native traces");
     }
 
-    /// Emit a load operation, where `dst` must be a register and `src` a memory
-    /// address.
-    fn emit_load(ops: &mut Assembler, dst: &Operand, src: &Operand) {
-        match (dst, src) {
-            (Operand::Register(dst), Operand::Memory(base, offset)) => {
-                // println!("Using {:?} as destination register", dst);
-                #[cfg(target_arch = "x86_64")]
-                dynasm!(ops
-                    ; mov Rq(*dst as u8), [Rq(*base as u8) + *offset]
-                );
-            }
-            (Operand::Register(dst), Operand::Immediate(value)) => {
-                #[cfg(target_arch = "x86_64")]
-                dynasm!(ops
-                    ;mov Rq(*dst as u8), *value
-                );
-            }
-            (Operand::Register(dst), Operand::Register(src)) => {
-                #[cfg(target_arch = "x86_64")]
-                dynasm!(ops
-                    ; mov Rq(*dst as u8), Rq(*src as u8)
-                );
-            }
-            _ => todo!(),
-        }
-    }
-
     /// Emit a move operation, this includes all data movement operations
     /// register to register and immediate to register.
     fn emit_mov(ops: &mut Assembler, dst: &Operand, src: &Operand) {
@@ -377,13 +417,40 @@ impl JitCache {
                     ;mov Rq(*dst as u8), Rq(*src as u8)
                 );
             }
-            _ => todo!(),
+            (Operand::Register(dst), Operand::Immediate(imm)) => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                        ;mov Rq(*dst as u8), *imm
+                );
+            }
+            (Operand::Register(dst), Operand::Memory(base, offset)) => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                    ;mov Rq(*dst as u8), [Rq(*base as u8) + *offset]
+                );
+            }
+            (Operand::Memory(base, offset), Operand::Register(src)) => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                    ; mov [Rq(*base as u8) + *offset], Rq(*src as u8)
+                );
+            }
+            (Operand::Memory(base, offset), Operand::Immediate(imm)) => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                        ; mov DWORD [Rq(*base as u8) + *offset], *imm as _
+                );
+            }
+            _ => unreachable!(
+                "Unexpected operands for `mov` `dst`={:?}, `src`={:?})",
+                dst, src
+            ),
         }
     }
 
     /// Emit an arithmetic operation, covers all simple instructions such as
     /// `add`, `mul` and `sub`.
-    fn emit_arithmetic(&mut self, ops: &mut Assembler) {
+    fn emit_arithmetic(&mut self, ops: &mut Assembler, op: Op) {
         let rhs = match self.operands.pop() {
             Some(rhs) => rhs,
             None => panic!("expected operand found None"),
@@ -392,7 +459,8 @@ impl JitCache {
             Some(lhs) => lhs,
             None => panic!("expected operand found None"),
         };
-        let dst = match &rhs {
+
+        let dst = match &lhs {
             &Operand::Register(reg) => Operand::Register(reg),
             // TODO: need to mov lhs operand to the first free register.
             _ => {
@@ -401,18 +469,41 @@ impl JitCache {
                 dst
             }
         };
-        self.operands.push(dst);
-    }
 
-    /// Emit a store operation, the restriction on `dst` and `src` depends on
-    /// the underlying architecture's addressing modes. For example in ARM64
-    /// `dst` can't be a memory location.
-    fn emit_store(
-        &mut self,
-        ops: &mut Assembler,
-        dst: &Operand,
-        src: &Operand,
-    ) {
+        match &rhs {
+            Operand::Register(reg) => self.registers.push_back(*reg),
+            _ => (),
+        }
+
+        self.operands.push(dst);
+
+        let Operand::Register(dst) = dst else {
+            unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
+        };
+        let Operand::Register(src) = rhs else {
+            unreachable!("Unexpected enum variant for `Operand` expected `Register` got {:?}", dst)
+        };
+        match op {
+            Op::Add => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                        ; add Rq(dst as u8), Rq(src as u8)
+                );
+            }
+            Op::Sub => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                        ; sub Rq(dst as u8), Rq(src as u8)
+                );
+            }
+            Op::IMul => {
+                #[cfg(target_arch = "x86_64")]
+                dynasm!(ops
+                        ; imul Rd(dst as u8), Rd(src as u8)
+                );
+            }
+            _ => todo!(),
+        }
     }
 
     /// Returns the first available register.
@@ -481,7 +572,7 @@ mod tests {
     fn can_emit_loads() {
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
         let _prologue = prologue!(ops);
-        JitCache::emit_load(
+        JitCache::emit_mov(
             &mut ops,
             &Operand::Register(Register::Rax),
             &Operand::Memory(Register::Rdi, 1),
