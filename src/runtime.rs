@@ -244,8 +244,8 @@ impl Instruction {
 /// and method we're executing.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ProgramCounter {
-    method_index: usize,
-    instruction_index: usize,
+    pub method_index: usize,
+    pub instruction_index: usize,
 }
 
 impl fmt::Display for ProgramCounter {
@@ -291,7 +291,7 @@ impl Default for ProgramCounter {
 /// Each frame has an operand stack and array of local variables.
 #[derive(Debug, Clone)]
 pub struct Frame {
-    pc: ProgramCounter,
+    pub pc: ProgramCounter,
     stack: Vec<Value>,
     pub locals: HashMap<usize, Value>,
 }
@@ -398,13 +398,16 @@ impl Runtime {
                 // Compile recorded trace.
                 self.jit_cache.compile(&recorded_trace);
             }
-            if false {
+            if self.jit_cache.has_native_trace(pc) {
                 println!("Entering the Jit @ {pc}");
                 // If we have a native trace at this pc run it
                 // and capture the return value which is the next
                 // pc to execute.
-                println!("Exiting the Jit @ {pc}");
+                let mut frame = self.frames.last().unwrap().clone();
+                let cont_pc = self.jit_cache.execute(pc, &mut frame);
+                println!("Exiting the Jit @ {cont_pc}");
                 // Continue execution with updated PC.
+                break 'next_inst;
             } else {
                 // println!("Interpreting");
                 let inst = self.fetch();

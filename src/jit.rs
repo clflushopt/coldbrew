@@ -236,6 +236,12 @@ impl JitCache {
 
             println!("Executing native trace");
             let exit_pc = execute(locals.as_mut_ptr(), exits.as_ptr()) as usize;
+            println!("Rewriting locals frame");
+            for (index, local) in locals.iter().enumerate() {
+                frame.locals.insert(index, Value::Int(*local));
+            }
+            println!("Rewriting frame pc");
+            frame.pc.instruction_index = exit_pc as usize;
             println!("Done executing native trace");
             exit_pc
         } else {
@@ -281,7 +287,6 @@ impl JitCache {
     ///     the assumption is that we will always exit back to the interpreter
     ///     since we currently don't support trace stitching.
     pub fn compile(&mut self, recording: &Trace) {
-        self.reset();
         // Reset Jit state.
         let pc = recording.start;
         let mut ops = dynasmrt::x64::Assembler::new().unwrap();
@@ -459,11 +464,10 @@ impl JitCache {
                         Some(Value::Int(x)) => x,
                             _ => unreachable!("First operand to if_icmpge (relative offset) must be int")
                     };
+                    let mnemonic = entry.instruction().get_mnemonic();
+                    println!("Conditional {mnemonic} Target Pc is {target}");
                     exit_pc = target;
-                    self.emit_cond_branch(
-                        &mut ops,
-                        entry.instruction().get_mnemonic(),
-                    );
+                    self.emit_cond_branch(&mut ops, mnemonic);
                 }
                 _ => println!(
                     "Found opcode : {:}",
