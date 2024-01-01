@@ -423,7 +423,10 @@ impl JitCache {
                 // Since our traces are self contained to the loop code
                 // the target offset will be the exit pc value at which
                 // the interpreter should continue execution.
-                OPCode::IfICmpGe | OPCode::IfICmpGt | OPCode::IfICmpLe => {
+                OPCode::IfICmpGe
+                | OPCode::IfICmpGt
+                | OPCode::IfICmpLe
+                | OPCode::IfICmpEq => {
                     let target = match entry.instruction().nth(0) {
                         Some(Value::Int(x)) => x,
                             _ => unreachable!("First operand to if_icmpge (relative offset) must be int")
@@ -433,6 +436,46 @@ impl JitCache {
                         + target as isize) as i32;
 
                     self.emit_cond_branch(&mut ops, mnemonic);
+                }
+                OPCode::IfEq => {
+                    let operand = self.free_register();
+                    match operand {
+                        Some(Operand::Register(reg)) => {
+                            #[cfg(target_arch = "x86_64")]
+                            dynasm!(ops
+                                ; cmp Rq(reg as u8), 0
+                                ; je ->abort_guard
+                            );
+                        }
+                        Some(Operand::Memory(base, offset)) => {
+                            #[cfg(target_arch = "x86_64")]
+                            dynasm!(ops
+                                ; cmp [Rq(base as u8) + offset], 0
+                                ; je ->abort_guard
+                            );
+                        }
+                        _ => unreachable!("expected operand for if_eq to be either `Operand::Memory` or `Operand::Register`"),
+                    }
+                }
+                OPCode::IfNe => {
+                    let operand = self.free_register();
+                    match operand {
+                        Some(Operand::Register(reg)) => {
+                            #[cfg(target_arch = "x86_64")]
+                            dynasm!(ops
+                                ; cmp Rq(reg as u8), 0
+                                ; jz ->abort_guard
+                            );
+                        }
+                        Some(Operand::Memory(base, offset)) => {
+                            #[cfg(target_arch = "x86_64")]
+                            dynasm!(ops
+                                ; cmp [Rq(base as u8) + offset], 0
+                                ; jz ->abort_guard
+                            );
+                        }
+                        _ => unreachable!("expected operand for if_eq to be either `Operand::Memory` or `Operand::Register`"),
+                    }
                 }
                 _ => (),
             }
@@ -702,6 +745,11 @@ impl JitCache {
             OPCode::IfICmpLe => {
                 dynasm!(ops
                     ; jle -> abort_guard
+                );
+            }
+            OPCode::IfICmpEq => {
+                dynasm!(ops
+                    ; je -> abort_guard
                 );
             }
             _ => unreachable!("Expected instruction for conditional branch to be a if_icmp<cond> {:?}", cond)
